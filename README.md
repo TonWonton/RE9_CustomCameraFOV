@@ -1,4 +1,5 @@
 # RE9_CustomCameraFOV
+
 ## Description
 Custom camera FOV mod / plugin for Resident Evil Requiem (RE9). Set custom FOV for 3rd person, 1st person, ADS, and more.
 
@@ -16,8 +17,21 @@ Custom camera FOV mod / plugin for Resident Evil Requiem (RE9). Set custom FOV f
 - Change ADS FOV for 1st and 3rd person separately
   - Two different ADS FOV modes
     - Fixed ADS FOV
-    - Zoom in same percentage as the game based on the configured (not ADS) FOV
-- FOV zoom speed is unchanged (exact same speed as the game for all settings)
+	- Zoom in same percentage as the game based on the configured (not ADS) FOV
 - Cutscenes are not affected
 - Interactions and in game events are not affected (e.g. the FOV will zoom in when inspecting things)
-- Settings are saved to config file and automatically loaded 
+- Settings are saved to config file and automatically loaded
+
+## Known issues
+- The UI is distorted/warped
+  - More noticeable the higher you set the FOV. Changing the Graphics -> Ultrawide fixes and changing some things related to UI and FOV might help (enabling the FOV options there might override this mods changes)
+
+## Changelog
+### v1.0.0
+- Initial release
+
+### v1.1.0
+- Add enable toggle
+- Add option to use original FOV for specific actions
+- Changes to fixed ADS FOV calculation
+- Potential fix for various fixed ADS FOV issues
