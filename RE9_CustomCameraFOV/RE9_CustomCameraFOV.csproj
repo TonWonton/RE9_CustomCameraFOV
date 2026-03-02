@@ -28,7 +28,7 @@
 	<Target Name="PostBuild" AfterTargets="PostBuildEvent">
 		<Exec Condition="'$(Configuration)' == 'Debug'" Command="xcopy &quot;$(MSBuildProjectDirectory)\RE9_CustomCameraFOV.cs&quot; &quot;D:\Games\steamapps\common\RESIDENT EVIL requiem BIOHAZARD requiem\reframework\plugins\source\&quot; /s /i /y" />
 		<Exec Condition="'$(Configuration)' == 'Release'" Command="xcopy &quot;$(TargetPath)&quot; &quot;D:\Games\steamapps\common\RESIDENT EVIL requiem BIOHAZARD requiem\reframework\plugins\managed\&quot; /s /i /y" />
-		<Exec Condition="'$(Configuration)' == 'Release'" Command="xcopy &quot;$(TargetPath)&quot; &quot;$(MSBuildProjectDirectory)\Releases\RE9_CustomCameraFOV\reframework\plugins\managed\&quot; /s /i /y" />
+		<Exec Condition="'$(Configuration)' == 'Release'" Command="xcopy &quot;$(TargetPath)&quot; &quot;$(MSBuildProjectDirectory)\..\Releases\reframework\plugins\managed\&quot; /s /i /y" />
 	</Target>
 
 </Project>

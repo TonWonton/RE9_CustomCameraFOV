@@ -35,3 +35,9 @@ Custom camera FOV mod / plugin for Resident Evil Requiem (RE9). Set custom FOV f
 - Add option to use original FOV for specific actions
 - Changes to fixed ADS FOV calculation
 - Potential fix for various fixed ADS FOV issues
+
+### v1.2.0
+- Fix UI being distorted
+- Fix interaction and inspection being too far zoomed in or out
+  - It will now always be the original FOV
+    - Remove previous two original FOV toggles
