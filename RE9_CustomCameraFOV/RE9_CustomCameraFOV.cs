@@ -10,17 +10,12 @@ using app;
 using via;
 using System.Numerics;
 using InteractLimitType = app.InteractManager.InteractLimitType;
+using via.audiorender;
+using via.landscape.spline;
 
 
 namespace RE9_CustomCameraFOV
 {
-	public enum PlayerCameraMode
-	{
-		None = 0,
-		TPS = 1,
-		FPS = 2,
-	}
-
 	public class CustomCameraFOVPlugin
 	{
 		#region PLUGIN_INFO
@@ -41,7 +36,7 @@ namespace RE9_CustomCameraFOV
 
 		/* VARIABLES */
 		//Const
-		public const float DEFAULT_TPS_FOV = 33f;
+		public const float DEFAULT_TPS_FOV = 40f;
 		public const float DEFAULT_TPS_ADS_FOV = 25f;
 		public const float DEFAULT_FPS_FOV = 46f;
 		public const float DEFAULT_FPS_ADS_FOV = 40f;
@@ -74,14 +69,11 @@ namespace RE9_CustomCameraFOV
 		private static ConfigEntry<float> _easeStrength = _config.Add("Ease strength", DEFAULT_EASE_STRENGTH);
 
 		//Singletons
-		private static PauseManager? _pauseManager;
 		private static InteractManager? _interactManager;
+		private static CharacterManager? _characterManager;
 
 		//Variables
 		private static PlayerCameraFOVCalc? _playerCameraFOVCalc;
-		private static PlayerCameraMode _playerCameraMode = PlayerCameraMode.None;
-		private static PlayerCameraMode _previousPlayerCameraMode = PlayerCameraMode.None;
-
 		private static float _resetTextSize = 0f;
 		public static float ResetTextSize
 		{
@@ -95,48 +87,32 @@ namespace RE9_CustomCameraFOV
 
 
 		/* METHODS */
-		private static void SetPlayerCameraMode(PlayerCameraMode mode)
-		{
-			if (_playerCameraMode != mode)
-			{
-				_previousPlayerCameraMode = _playerCameraMode;
-				_playerCameraMode = mode;
-			}
-		}
-
 		private static float GetTPSFOV(float desiredFOV)
 		{
-			float newFOV = desiredFOV;
-
-			//Check paused and interact first
-			InteractManager? interactManager = _interactManager;
-			PauseManager? pauseManager = _pauseManager;
-
-			if (interactManager != null)
-			{
-				if (pauseManager != null)
-				{
-					//If paused due to player interaction return and let game reset FOV
-					if ((pauseManager._CurrentPauseTypeBits != 0) && (interactManager.LimitType & InteractLimitType.PLOneAction) != 0) return newFOV;
-				}
-
-				if ((interactManager.LimitType & InteractLimitType.SpecialMode) != 0) return newFOV;
-			}
-
 			//Calculate FOV
+			float newFOV = desiredFOV;
 			float tpsFOV = _tpsFov.Value;
 			float tpsADSFOV = _tpsFovADS.Value;
 
 			if (_tpsFixedADSFOV.Value)
 			{
-				float t = (desiredFOV - DEFAULT_TPS_FOV) / (DEFAULT_TPS_ADS_FOV - DEFAULT_TPS_FOV); //Linear interpolation
-				t = Mathf.EaseInOutSineLinearBlend(t, _easeStrength.Value); //Sine in out ease
-				newFOV = tpsFOV + t * (tpsADSFOV - tpsFOV);
+				if (_interactManager != null && (_interactManager.LimitType == InteractLimitType.Stance || _interactManager.LimitType == InteractLimitType.ScopeStance))
+				{
+					//Scale with ADS FOV
+					float t = (desiredFOV - DEFAULT_TPS_FOV) / (DEFAULT_TPS_ADS_FOV - DEFAULT_TPS_FOV);
+					t = Mathf.EaseInOutSineLinearBlend(t, _easeStrength.Value);
+					newFOV = tpsFOV + t * (tpsADSFOV - tpsFOV);
+				}
+				else
+				{
+					//Scale with normal FOV
+					newFOV = desiredFOV / DEFAULT_TPS_FOV * tpsFOV;
+				}
 			}
 			else
 			{
-				//Calculate FOV multiplier and multiply with configured FOV so the FOV zoom percentage is the same
-				newFOV = (desiredFOV / DEFAULT_TPS_FOV) * tpsFOV;
+				//Scale with normal FOV
+				newFOV = desiredFOV / DEFAULT_TPS_FOV * tpsFOV;
 			}
 
 			return newFOV;
@@ -144,37 +120,30 @@ namespace RE9_CustomCameraFOV
 
 		private static float GetFPSFOV(float desiredFOV)
 		{
-			float newFOV = desiredFOV;
-
-			//Check paused and interact first
-			InteractManager? interactManager = _interactManager;
-			PauseManager? pauseManager = _pauseManager;
-
-			if (interactManager != null)
-			{
-				if (pauseManager != null)
-				{
-					//If paused due to player interaction return and let game reset FOV
-					if ((pauseManager._CurrentPauseTypeBits != 0) && (interactManager.LimitType & InteractLimitType.PLOneAction) != 0) return newFOV;
-				}
-
-				if ((interactManager.LimitType & InteractLimitType.SpecialMode) != 0) return newFOV;
-			}
-
 			//Calculate FOV
+			float newFOV = desiredFOV;
 			float fpsFOV = _fpsFOV.Value;
 			float fpsADSFOV = _fpsFOVADS.Value;
 
 			if (_fpsFixedADSFOV.Value)
 			{
-				float t = (desiredFOV - DEFAULT_FPS_FOV) / (DEFAULT_FPS_ADS_FOV - DEFAULT_FPS_FOV); //Linear interpolation
-				t = Mathf.EaseInOutSineLinearBlend(t, _easeStrength.Value); //Sine in out ease
-				newFOV = fpsFOV + t * (fpsADSFOV - fpsFOV);
+				if (_interactManager != null && (_interactManager.LimitType == InteractLimitType.Stance || _interactManager.LimitType == InteractLimitType.ScopeStance))
+				{
+					//Scale with ADS FOV
+					float t = (desiredFOV - DEFAULT_FPS_FOV) / (DEFAULT_FPS_ADS_FOV - DEFAULT_FPS_FOV); //Linear interpolation
+					t = Mathf.EaseInOutSineLinearBlend(t, _easeStrength.Value); //Sine in out ease
+					newFOV = fpsFOV + t * (fpsADSFOV - fpsFOV);
+				}
+				else
+				{
+					//Scale with normal FOV
+					newFOV = desiredFOV / DEFAULT_FPS_FOV * fpsFOV;
+				}
 			}
 			else
 			{
-				//Calculate FOV multiplier and multiply with configured FOV so the FOV zoom percentage is the same
-				newFOV = (desiredFOV / DEFAULT_FPS_FOV) * fpsFOV;
+				//Scale with normal FOV
+				newFOV = desiredFOV / DEFAULT_FPS_FOV * fpsFOV;
 			}
 
 			return newFOV;
@@ -246,27 +215,15 @@ namespace RE9_CustomCameraFOV
 
 
 		/* HOOKS */
-		[MethodHook(typeof(TPSCameraPositionCalc), nameof(TPSCameraPositionCalc.update), MethodHookType.Pre)]
-		public static PreHookResult PreTPSCameraPositionCalcUpdate(Span<ulong> args)
-		{
-			//If TPS camera is updating set PlayerCameraMode to TPS
-			SetPlayerCameraMode(PlayerCameraMode.TPS);
-			return PreHookResult.Continue;
-		}
-
-		[MethodHook(typeof(FPSCameraPositionInterpolation), nameof(FPSCameraPositionInterpolation.update), MethodHookType.Pre)]
-		public static PreHookResult PreFPSCameraPositionCalcUpdate(Span<ulong> args)
-		{
-			//If FPS camera is updating set PlayerCameraMode to FPS
-			SetPlayerCameraMode(PlayerCameraMode.FPS);
-			return PreHookResult.Continue;
-		}
-
 		[MethodHook(typeof(PlayerCameraFOVCalc), nameof(PlayerCameraFOVCalc.getFOV), MethodHookType.Pre)]
 		public static PreHookResult PrePlayerCameraFOVCalcGetFOV(Span<ulong> args)
 		{
-			//Get instance
-			_playerCameraFOVCalc = ManagedObject.ToManagedObject(args[1]).TryAs<PlayerCameraFOVCalc>();
+			if (_playerCameraFOVCalc == null)
+			{
+				//Get instance
+				_playerCameraFOVCalc = ManagedObject.ToManagedObject(args[1]).TryAs<PlayerCameraFOVCalc>();
+			}
+
 			return PreHookResult.Continue;
 		}
 
@@ -275,45 +232,27 @@ namespace RE9_CustomCameraFOV
 		{
 			if (_enabled.Value)
 			{
+				//Get InteractManager and CharacterManager if null
+				if (_interactManager == null) _interactManager = API.GetManagedSingletonT<InteractManager>();
+				if (_characterManager == null) _characterManager = API.GetManagedSingletonT<CharacterManager>();
+
 				//Get return value
 				float desiredFOV = BitConverter.Int32BitsToSingle((int)(ptr & 0xFFFFFFFF));
 				float newFOV = desiredFOV;
-
-				//Get InteractManager and PauseManager if null
-				if (_interactManager == null) _interactManager = API.GetManagedSingletonT<InteractManager>();
-				if (_pauseManager == null) _pauseManager = API.GetManagedSingletonT<PauseManager>();
+				//Log.Info("Original FOV: " + desiredFOV);
 
 				//Check current PlayerCameraMode and set FOV accordingly
-				PlayerCameraMode currentCameraMode = _playerCameraMode;
-				if (currentCameraMode != PlayerCameraMode.None)
+				if (_characterManager != null && _characterManager.PlayerContextFast != null)
 				{
-					if (currentCameraMode == PlayerCameraMode.TPS) newFOV = GetTPSFOV(desiredFOV);
-					else if (currentCameraMode == PlayerCameraMode.FPS) newFOV = GetFPSFOV(desiredFOV);
-				}
-				else
-				{
-					if (_pauseManager != null)
-					{
-						if (_pauseManager._CurrentPauseTypeBits != 8) //8 == cutscene, let game reset FOV
-						{
-							//If paused but not in cutscene, set FOV according to previous PlayerCameraMode
-							PlayerCameraMode previousCameraMode = _previousPlayerCameraMode;
-							if (previousCameraMode == PlayerCameraMode.TPS) newFOV = GetTPSFOV(desiredFOV);
-							else if (previousCameraMode == PlayerCameraMode.FPS) newFOV = GetFPSFOV(desiredFOV);
-						}
-					}
+					PlayerMode currentViewMode = _characterManager.PlayerContextFast.CurrentViewMode;
+					if (currentViewMode == PlayerMode.TPS) newFOV = GetTPSFOV(desiredFOV);
+					else if (currentViewMode == PlayerMode.FPS) newFOV = GetFPSFOV(desiredFOV);
 				}
 
 				//Set new FOV
 				ptr = (ptr & 0xFFFFFFFF00000000) | (uint)BitConverter.SingleToInt32Bits(newFOV);
+				//Log.Info("New FOV: " + newFOV);
 			}
-		}
-
-		[Callback(typeof(BeginRendering), CallbackType.Pre)]
-		public static void PreBeginRendering()
-		{
-			//Reset PlayerCameraMode at the end or the paused FOV change might be one frame late
-			SetPlayerCameraMode(PlayerCameraMode.None);
 		}
 
 
