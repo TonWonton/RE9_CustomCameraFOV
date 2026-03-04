@@ -59,11 +59,13 @@ namespace RE9_CustomCameraFOV
 		private static ConfigEntry<float> _tpsFov = _config.Add("TPS FOV", DEFAULT_TPS_FOV);
 		private static ConfigEntry<float> _tpsFovADS = _config.Add("TPS ADS FOV", DEFAULT_TPS_ADS_FOV);
 		private static ConfigEntry<bool> _tpsFixedADSFOV = _config.Add("TPS Fixed ADS FOV", false);
+		private static ConfigEntry<bool> _tpsForceExactFOV = _config.Add("TPS Force exact FOV", false);
 
 		//FPS
 		private static ConfigEntry<float> _fpsFOV = _config.Add("FPS FOV", DEFAULT_FPS_FOV);
 		private static ConfigEntry<float> _fpsFOVADS = _config.Add("FPS ADS FOV", DEFAULT_FPS_ADS_FOV);
 		private static ConfigEntry<bool> _fpsFixedADSFOV = _config.Add("FPS Fixed ADS FOV", false);
+		private static ConfigEntry<bool> _fpsForceExactFOV = _config.Add("FPS Force exact FOV", false);
 
 		//Modifiers
 		private static ConfigEntry<float> _easeStrength = _config.Add("Ease strength", DEFAULT_EASE_STRENGTH);
@@ -93,26 +95,35 @@ namespace RE9_CustomCameraFOV
 			float newFOV = desiredFOV;
 			float tpsFOV = _tpsFov.Value;
 			float tpsADSFOV = _tpsFovADS.Value;
+			bool isADS = _interactManager != null && (_interactManager.LimitType == InteractLimitType.Stance || _interactManager.LimitType == InteractLimitType.ScopeStance);
 
-			if (_tpsFixedADSFOV.Value)
+			if (_tpsForceExactFOV.Value)
 			{
-				if (_interactManager != null && (_interactManager.LimitType == InteractLimitType.Stance || _interactManager.LimitType == InteractLimitType.ScopeStance))
+				if (isADS) newFOV = tpsADSFOV;
+				else newFOV = tpsFOV;
+			}
+			else
+			{
+				if (_tpsFixedADSFOV.Value)
 				{
-					//Scale with ADS FOV
-					float t = (desiredFOV - DEFAULT_TPS_FOV) / (DEFAULT_TPS_ADS_FOV - DEFAULT_TPS_FOV);
-					t = Mathf.EaseInOutSineLinearBlend(t, _easeStrength.Value);
-					newFOV = tpsFOV + t * (tpsADSFOV - tpsFOV);
+					if (isADS)
+					{
+						//Scale with ADS FOV
+						float t = (desiredFOV - DEFAULT_TPS_FOV) / (DEFAULT_TPS_ADS_FOV - DEFAULT_TPS_FOV);
+						t = Mathf.EaseInOutSineLinearBlend(t, _easeStrength.Value);
+						newFOV = tpsFOV + t * (tpsADSFOV - tpsFOV);
+					}
+					else
+					{
+						//Scale with normal FOV
+						newFOV = desiredFOV / DEFAULT_TPS_FOV * tpsFOV;
+					}
 				}
 				else
 				{
 					//Scale with normal FOV
 					newFOV = desiredFOV / DEFAULT_TPS_FOV * tpsFOV;
 				}
-			}
-			else
-			{
-				//Scale with normal FOV
-				newFOV = desiredFOV / DEFAULT_TPS_FOV * tpsFOV;
 			}
 
 			return newFOV;
@@ -124,15 +135,29 @@ namespace RE9_CustomCameraFOV
 			float newFOV = desiredFOV;
 			float fpsFOV = _fpsFOV.Value;
 			float fpsADSFOV = _fpsFOVADS.Value;
+			bool isADS = _interactManager != null && (_interactManager.LimitType == InteractLimitType.Stance || _interactManager.LimitType == InteractLimitType.ScopeStance);
 
-			if (_fpsFixedADSFOV.Value)
+			if (_fpsForceExactFOV.Value)
 			{
-				if (_interactManager != null && (_interactManager.LimitType == InteractLimitType.Stance || _interactManager.LimitType == InteractLimitType.ScopeStance))
+				if (isADS) newFOV = fpsADSFOV;
+				else newFOV = fpsFOV;
+			}
+			else
+			{
+				if (_fpsFixedADSFOV.Value)
 				{
-					//Scale with ADS FOV
-					float t = (desiredFOV - DEFAULT_FPS_FOV) / (DEFAULT_FPS_ADS_FOV - DEFAULT_FPS_FOV); //Linear interpolation
-					t = Mathf.EaseInOutSineLinearBlend(t, _easeStrength.Value); //Sine in out ease
-					newFOV = fpsFOV + t * (fpsADSFOV - fpsFOV);
+					if (isADS)
+					{
+						//Scale with ADS FOV
+						float t = (desiredFOV - DEFAULT_FPS_FOV) / (DEFAULT_FPS_ADS_FOV - DEFAULT_FPS_FOV); //Linear interpolation
+						t = Mathf.EaseInOutSineLinearBlend(t, _easeStrength.Value); //Sine in out ease
+						newFOV = fpsFOV + t * (fpsADSFOV - fpsFOV);
+					}
+					else
+					{
+						//Scale with normal FOV
+						newFOV = desiredFOV / DEFAULT_FPS_FOV * fpsFOV;
+					}
 				}
 				else
 				{
@@ -140,22 +165,24 @@ namespace RE9_CustomCameraFOV
 					newFOV = desiredFOV / DEFAULT_FPS_FOV * fpsFOV;
 				}
 			}
-			else
-			{
-				//Scale with normal FOV
-				newFOV = desiredFOV / DEFAULT_FPS_FOV * fpsFOV;
-			}
 
 			return newFOV;
 		}
 
 		private static void ReApplyParamsToFOVCalc()
 		{
-			if (_playerCameraFOVCalc != null)
+			try
 			{
-				PlayerCameraFOVParam param = _playerCameraFOVCalc._Param;
-				_playerCameraFOVCalc.setup(param);
+				if (_playerCameraFOVCalc != null)
+				{
+					var param = _playerCameraFOVCalc._Param;
+					if (param != null)
+					{
+						_playerCameraFOVCalc.setup(param);
+					}
+				}
 			}
+			catch { }
 		}
 
 		private static void OnSettingsChanged()
@@ -171,10 +198,12 @@ namespace RE9_CustomCameraFOV
 			_tpsFov.ValueChanged += OnSettingsChanged;
 			_tpsFovADS.ValueChanged += OnSettingsChanged;
 			_tpsFixedADSFOV.ValueChanged += OnSettingsChanged;
+			_tpsForceExactFOV.ValueChanged += OnSettingsChanged;
 
 			_fpsFOV.ValueChanged += OnSettingsChanged;
 			_fpsFOVADS.ValueChanged += OnSettingsChanged;
 			_fpsFixedADSFOV.ValueChanged += OnSettingsChanged;
+			_fpsForceExactFOV.ValueChanged += OnSettingsChanged;
 
 			_easeStrength.ValueChanged += OnSettingsChanged;
 		}
@@ -186,10 +215,12 @@ namespace RE9_CustomCameraFOV
 			_tpsFov.ValueChanged -= OnSettingsChanged;
 			_tpsFovADS.ValueChanged -= OnSettingsChanged;
 			_tpsFixedADSFOV.ValueChanged -= OnSettingsChanged;
+			_tpsForceExactFOV.ValueChanged -= OnSettingsChanged;
 
 			_fpsFOV.ValueChanged -= OnSettingsChanged;
 			_fpsFOVADS.ValueChanged -= OnSettingsChanged;
 			_fpsFixedADSFOV.ValueChanged -= OnSettingsChanged;
+			_fpsForceExactFOV.ValueChanged -= OnSettingsChanged;
 
 			_easeStrength.ValueChanged -= OnSettingsChanged;
 		}
@@ -218,12 +249,8 @@ namespace RE9_CustomCameraFOV
 		[MethodHook(typeof(PlayerCameraFOVCalc), nameof(PlayerCameraFOVCalc.getFOV), MethodHookType.Pre)]
 		public static PreHookResult PrePlayerCameraFOVCalcGetFOV(Span<ulong> args)
 		{
-			if (_playerCameraFOVCalc == null)
-			{
-				//Get instance
-				_playerCameraFOVCalc = ManagedObject.ToManagedObject(args[1]).TryAs<PlayerCameraFOVCalc>();
-			}
-
+			try { _playerCameraFOVCalc = ManagedObject.ToManagedObject(args[1]).TryAs<PlayerCameraFOVCalc>(); }
+			catch { _playerCameraFOVCalc = null; }
 			return PreHookResult.Continue;
 		}
 
@@ -251,6 +278,7 @@ namespace RE9_CustomCameraFOV
 
 				//Set new FOV
 				ptr = (ptr & 0xFFFFFFFF00000000) | (uint)BitConverter.SingleToInt32Bits(newFOV);
+
 				//Log.Info("New FOV: " + newFOV);
 			}
 		}
@@ -266,9 +294,18 @@ namespace RE9_CustomCameraFOV
 				int labelNr = 0;
 
 				ImGui.TextColored(_colorRed, "Note: FOV is vertical. 71 vertical ~= 103 horizontal @ 16:9.");
-				ImGui.Text("Fixed ADS FOV ENABLED = use ADS FOV value below.");
-				ImGui.Text("Fixed ADS FOV DISABLED = zoom in same percent value \n"
+				ImGui.Separator();
+
+				ImGui.Text("- Force exact FOV ENABLED = use exact FOV values and don't \n"
+							+ "scale together with game FOV.");
+				ImGui.Text("- Force exact FOV DISABLED = allow configured FOV to scale \n"
+							+ "together with game FOV.");
+				ImGui.Separator();
+
+				ImGui.Text("- Fixed ADS FOV ENABLED = use ADS FOV value below.");
+				ImGui.Text("- Fixed ADS FOV DISABLED = zoom in same percent value \n"
 							+ "as the game starting from the configured (not ADS) FOV.");
+				ImGui.Separator();
 				ImGui.NewLine();
 
 				ImGui.Text("GENERAL");
@@ -279,6 +316,7 @@ namespace RE9_CustomCameraFOV
 
 				ImGui.Text("TPS");
 				ImGui.Separator();
+				_tpsForceExactFOV.DrawCheckbox(); _tpsForceExactFOV.DrawResetButtonSameLine(ref labelNr);
 				_tpsFixedADSFOV.DrawCheckbox(); _tpsFixedADSFOV.DrawResetButtonSameLine(ref labelNr);
 				_tpsFov.DrawDragFloat(FOV_STEP, MIN_FOV, MAX_FOV); _tpsFov.DrawResetButtonSameLine(ref labelNr);
 				_tpsFovADS.DrawDragFloat(FOV_STEP, MIN_FOV, MAX_FOV); _tpsFovADS.DrawResetButtonSameLine(ref labelNr);
@@ -286,6 +324,7 @@ namespace RE9_CustomCameraFOV
 
 				ImGui.Text("FPS");
 				ImGui.Separator();
+				_fpsForceExactFOV.DrawCheckbox(); _fpsForceExactFOV.DrawResetButtonSameLine(ref labelNr);
 				_fpsFixedADSFOV.DrawCheckbox(); _fpsFixedADSFOV.DrawResetButtonSameLine(ref labelNr);
 				_fpsFOV.DrawDragFloat(FOV_STEP, MIN_FOV, MAX_FOV); _fpsFOV.DrawResetButtonSameLine(ref labelNr);
 				_fpsFOVADS.DrawDragFloat(FOV_STEP, MIN_FOV, MAX_FOV); _fpsFOVADS.DrawResetButtonSameLine(ref labelNr);
