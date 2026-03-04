@@ -3,6 +3,13 @@
 ## Description
 Custom camera FOV mod / plugin for Resident Evil Requiem (RE9). Set custom FOV for 3rd person, 1st person, ADS, and more.
 
+## Note
+The newer versions of REFramework will sometimes not work and might also sometimes crash the game. It starts working again when reverting to an older version. REF Nightly 01266 works for me: https://github.com/praydog/REFramework-nightly/releases/tag/nightly-01266-912135400259d2857773bacbebf3be2af022fe35﻿
+
+Until I am able to find out why and fix it, use the older version of REFramework and the C# API if you want to use the plugin. If you are on a newer version that has problems:
+1. Go to your \GAME_FOLDER\reframework\plugins\managed\ and delete the "generated" folder
+2. Install the REFramework nightly version linked above, both RE9.zip AND csharp-api.zip. Extract to game folder and press yes to overwrite
+
 ## Prerequisites
 - REFramework and the REFramework C# API (csharp-api) https://github.com/praydog/REFramework-nightly/releases
 - .NET 10.0 Desktop Runtime https://dotnet.microsoft.com/en-us/download/dotnet/10.0
@@ -44,3 +51,4 @@ Custom camera FOV mod / plugin for Resident Evil Requiem (RE9). Set custom FOV f
 - Fix FOV not applying after cutscenes
 - Fix FOV value being inaccurate during some parts of the game
 - Fix fixed ADS FOV mode affecting the normal FOV
+
