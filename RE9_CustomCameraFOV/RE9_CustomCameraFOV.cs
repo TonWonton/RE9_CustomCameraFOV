@@ -26,7 +26,7 @@ namespace RE9_CustomCameraFOV
 		public const string COMPANY = "https://github.com/TonWonton/RE9_CustomCameraFOV";
 
 		public const string GUID = "RE9_CustomCameraFOV";
-		public const string VERSION = "1.2.1";
+		public const string VERSION = "1.3.0";
 
 		public const string GUID_AND_V_VERSION = GUID + " v" + VERSION;
 
