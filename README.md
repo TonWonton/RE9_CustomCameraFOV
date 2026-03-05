@@ -3,6 +3,9 @@
 ## Description
 Custom camera FOV mod / plugin for RE9. Set different FOV for third person, first person, and ADS. Can also disable ADS zoom and choose different FOV scaling types (set exact values, or scale FOV with game)
 
+## Dependencies
+- REFrameworkNETPluginConfig https://github.com/TonWonton/REFrameworkNETPluginConfig
+
 ## Prerequisites
 - REFramework and the REFramework C# API (csharp-api) https://github.com/praydog/REFramework-nightly/releases
 - .NET 10.0 Desktop Runtime https://dotnet.microsoft.com/en-us/download/dotnet/10.0
@@ -54,4 +57,5 @@ Custom camera FOV mod / plugin for RE9. Set different FOV for third person, firs
 ### v1.4.0
 - Add option to disable ADS zoom / fov ADS change
 - Add option to set exact FOV for normal look FOV and ADS FOV separately
+
 
