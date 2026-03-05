@@ -10,8 +10,6 @@ using app;
 using via;
 using System.Numerics;
 using InteractLimitType = app.InteractManager.InteractLimitType;
-using via.audiorender;
-using via.landscape.spline;
 
 
 namespace RE9_CustomCameraFOV
@@ -26,7 +24,7 @@ namespace RE9_CustomCameraFOV
 		public const string COMPANY = "https://github.com/TonWonton/RE9_CustomCameraFOV";
 
 		public const string GUID = "RE9_CustomCameraFOV";
-		public const string VERSION = "1.3.0";
+		public const string VERSION = "1.4.0";
 
 		public const string GUID_AND_V_VERSION = GUID + " v" + VERSION;
 
@@ -40,10 +38,9 @@ namespace RE9_CustomCameraFOV
 		public const float DEFAULT_TPS_ADS_FOV = 25f;
 		public const float DEFAULT_FPS_FOV = 46f;
 		public const float DEFAULT_FPS_ADS_FOV = 40f;
-		public const float DEFAULT_EASE_STRENGTH = 0.5f;
 
-		public const float MIN_FOV = -180f;
-		public const float MAX_FOV = 360f;
+		public const float MIN_FOV = 0f;
+		public const float MAX_FOV = 180f;
 		public const float FOV_STEP = 0.1f;
 
 		//Config
@@ -52,30 +49,49 @@ namespace RE9_CustomCameraFOV
 
 		//General
 		private static ConfigEntry<bool> _enabled = _config.Add("Enabled", true);
-		//private static ConfigEntry<bool> _interactUseOriginalFOV = _config.Add("Use original FOV for interact", true);
-		//private static ConfigEntry<bool> _inspectUseOriginalFOV = _config.Add("Use original FOV for inspect", false);
 
 		//TPS
-		private static ConfigEntry<float> _tpsFov = _config.Add("TPS FOV", DEFAULT_TPS_FOV);
-		private static ConfigEntry<float> _tpsFovADS = _config.Add("TPS ADS FOV", DEFAULT_TPS_ADS_FOV);
+		private static ConfigEntry<float> _tpsFOV = _config.Add("TPS FOV", DEFAULT_TPS_FOV);
+		private static ConfigEntry<float> _tpsADSFOV = _config.Add("TPS ADS FOV", DEFAULT_TPS_ADS_FOV);
 		private static ConfigEntry<bool> _tpsFixedADSFOV = _config.Add("TPS Fixed ADS FOV", false);
 		private static ConfigEntry<bool> _tpsForceExactFOV = _config.Add("TPS Force exact FOV", false);
+		private static ConfigEntry<bool> _tpsForceExactADSFOV = _config.Add("TPS Force exact ADS FOV", false);
+		private static ConfigEntry<bool> _tpsDisableADSFOVChange = _config.Add("TPS Disable ADS zoom / FOV change", false);
 
 		//FPS
 		private static ConfigEntry<float> _fpsFOV = _config.Add("FPS FOV", DEFAULT_FPS_FOV);
-		private static ConfigEntry<float> _fpsFOVADS = _config.Add("FPS ADS FOV", DEFAULT_FPS_ADS_FOV);
+		private static ConfigEntry<float> _fpsADSFOV = _config.Add("FPS ADS FOV", DEFAULT_FPS_ADS_FOV);
 		private static ConfigEntry<bool> _fpsFixedADSFOV = _config.Add("FPS Fixed ADS FOV", false);
 		private static ConfigEntry<bool> _fpsForceExactFOV = _config.Add("FPS Force exact FOV", false);
+		private static ConfigEntry<bool> _fpsForceExactADSFOV = _config.Add("FPS Force exact ADS FOV", false);
+		private static ConfigEntry<bool> _fpsDisableADSFOVChange = _config.Add("FPS Disable ADS zoom / FOV change", false);
 
-		//Modifiers
-		private static ConfigEntry<float> _easeStrength = _config.Add("Ease strength", DEFAULT_EASE_STRENGTH);
-
-		//Singletons
+		//References
 		private static InteractManager? _interactManager;
 		private static CharacterManager? _characterManager;
+		private static PlayerCameraFOVCalc? _playerCameraFOVCalc;
 
 		//Variables
-		private static PlayerCameraFOVCalc? _playerCameraFOVCalc;
+		private static float _previousTPSFOV = 0f;
+		public static float PreviousTPSFOV
+		{
+			get
+			{
+				if (_previousTPSFOV != 0f) return _previousTPSFOV;
+				else return _tpsFOV.Value;
+			}
+		}
+
+		private static float _previousFPSFOV = 0f;
+		public static float PreviousFPSFOV
+		{
+			get
+			{
+				if (_previousFPSFOV != 0f) return _previousFPSFOV;
+				else return _fpsFOV.Value;
+			}
+		}
+
 		private static float _resetTextSize = 0f;
 		public static float ResetTextSize
 		{
@@ -93,37 +109,35 @@ namespace RE9_CustomCameraFOV
 		{
 			//Calculate FOV
 			float newFOV = desiredFOV;
-			float tpsFOV = _tpsFov.Value;
-			float tpsADSFOV = _tpsFovADS.Value;
-			bool isADS = _interactManager != null && (_interactManager.LimitType == InteractLimitType.Stance || _interactManager.LimitType == InteractLimitType.ScopeStance);
+			float tpsFOV = _tpsFOV.Value;
+			float tpsADSFOV = _tpsADSFOV.Value;
 
-			if (_tpsForceExactFOV.Value)
+			InteractManager? interactManager = _interactManager;
+			bool isADS = interactManager != null && (interactManager.LimitType == InteractLimitType.Stance || interactManager.LimitType == InteractLimitType.ScopeStance);
+
+			if (isADS)
 			{
-				if (isADS) newFOV = tpsADSFOV;
-				else newFOV = tpsFOV;
-			}
-			else
-			{
-				if (_tpsFixedADSFOV.Value)
+				//ADS
+				if (_tpsDisableADSFOVChange.Value)
 				{
-					if (isADS)
-					{
-						//Scale with ADS FOV
-						float t = (desiredFOV - DEFAULT_TPS_FOV) / (DEFAULT_TPS_ADS_FOV - DEFAULT_TPS_FOV);
-						t = Mathf.EaseInOutSineLinearBlend(t, _easeStrength.Value);
-						newFOV = tpsFOV + t * (tpsADSFOV - tpsFOV);
-					}
-					else
-					{
-						//Scale with normal FOV
-						newFOV = desiredFOV / DEFAULT_TPS_FOV * tpsFOV;
-					}
+					//Set forced exact or previous FOV
+					if (_tpsForceExactFOV.Value) newFOV = tpsFOV; //Force exact value
+					else newFOV = PreviousTPSFOV; //Set previous FOV
 				}
 				else
 				{
-					//Scale with normal FOV
-					newFOV = desiredFOV / DEFAULT_TPS_FOV * tpsFOV;
+					//Calculate ADS FOV
+					if (_tpsForceExactADSFOV.Value) newFOV = tpsADSFOV; //Force exact ADS FOV
+					else if (_tpsFixedADSFOV.Value) newFOV = desiredFOV / DEFAULT_TPS_ADS_FOV * tpsADSFOV; //Target specific FOV and scale with game
+					else newFOV = desiredFOV / DEFAULT_TPS_FOV * tpsFOV; //Zoom in same percent value as the game from the configured FOV
 				}
+			}
+			else
+			{
+				//Look
+				if (_tpsForceExactFOV.Value) newFOV = tpsFOV; //Force exact value
+				else newFOV = desiredFOV / DEFAULT_TPS_FOV * tpsFOV; //Zoom in same percent value as the game from the configured FOV
+				_previousTPSFOV = newFOV;
 			}
 
 			return newFOV;
@@ -134,36 +148,34 @@ namespace RE9_CustomCameraFOV
 			//Calculate FOV
 			float newFOV = desiredFOV;
 			float fpsFOV = _fpsFOV.Value;
-			float fpsADSFOV = _fpsFOVADS.Value;
-			bool isADS = _interactManager != null && (_interactManager.LimitType == InteractLimitType.Stance || _interactManager.LimitType == InteractLimitType.ScopeStance);
+			float fpsADSFOV = _fpsADSFOV.Value;
 
-			if (_fpsForceExactFOV.Value)
+			InteractManager? interactManager = _interactManager;
+			bool isADS = interactManager != null && (interactManager.LimitType == InteractLimitType.Stance || interactManager.LimitType == InteractLimitType.ScopeStance);
+
+			if (isADS)
 			{
-				if (isADS) newFOV = fpsADSFOV;
-				else newFOV = fpsFOV;
-			}
-			else
-			{
-				if (_fpsFixedADSFOV.Value)
+				//ADS
+				if (_fpsDisableADSFOVChange.Value)
 				{
-					if (isADS)
-					{
-						//Scale with ADS FOV
-						float t = (desiredFOV - DEFAULT_FPS_FOV) / (DEFAULT_FPS_ADS_FOV - DEFAULT_FPS_FOV); //Linear interpolation
-						t = Mathf.EaseInOutSineLinearBlend(t, _easeStrength.Value); //Sine in out ease
-						newFOV = fpsFOV + t * (fpsADSFOV - fpsFOV);
-					}
-					else
-					{
-						//Scale with normal FOV
-						newFOV = desiredFOV / DEFAULT_FPS_FOV * fpsFOV;
-					}
+					//Set forced exact or previous FOV
+					if (_fpsForceExactFOV.Value) newFOV = fpsFOV; //Force exact normal FOV
+					else newFOV = PreviousFPSFOV; //Set previous FOV
 				}
 				else
 				{
-					//Scale with normal FOV
-					newFOV = desiredFOV / DEFAULT_FPS_FOV * fpsFOV;
+					//Calculate ADS FOV
+					if (_fpsForceExactADSFOV.Value) newFOV = fpsADSFOV; //Force exact ADS FOV
+					else if (_fpsFixedADSFOV.Value) newFOV = desiredFOV / DEFAULT_FPS_ADS_FOV * fpsADSFOV; //Target specific FOV and scale with game
+					else newFOV = desiredFOV / DEFAULT_FPS_FOV * fpsFOV; //Zoom in same percent value as the game from the configured FOV
 				}
+			}
+			else
+			{
+				//Look
+				if (_fpsForceExactFOV.Value) newFOV = fpsFOV; //Force exact normal FOV
+				else newFOV = desiredFOV / DEFAULT_FPS_FOV * fpsFOV; //Zoom in same percent value as the game from the configured FOV
+				_previousFPSFOV = newFOV;
 			}
 
 			return newFOV;
@@ -195,34 +207,38 @@ namespace RE9_CustomCameraFOV
 		{
 			_enabled.ValueChanged += OnSettingsChanged;
 
-			_tpsFov.ValueChanged += OnSettingsChanged;
-			_tpsFovADS.ValueChanged += OnSettingsChanged;
+			_tpsFOV.ValueChanged += OnSettingsChanged;
+			_tpsADSFOV.ValueChanged += OnSettingsChanged;
 			_tpsFixedADSFOV.ValueChanged += OnSettingsChanged;
 			_tpsForceExactFOV.ValueChanged += OnSettingsChanged;
+			_tpsForceExactADSFOV.ValueChanged += OnSettingsChanged;
+			_tpsDisableADSFOVChange.ValueChanged += OnSettingsChanged;
 
 			_fpsFOV.ValueChanged += OnSettingsChanged;
-			_fpsFOVADS.ValueChanged += OnSettingsChanged;
+			_fpsADSFOV.ValueChanged += OnSettingsChanged;
 			_fpsFixedADSFOV.ValueChanged += OnSettingsChanged;
 			_fpsForceExactFOV.ValueChanged += OnSettingsChanged;
-
-			_easeStrength.ValueChanged += OnSettingsChanged;
+			_fpsForceExactADSFOV.ValueChanged += OnSettingsChanged;
+			_fpsDisableADSFOVChange.ValueChanged += OnSettingsChanged;
 		}
 
 		private static void UnregisterConfigEvents()
 		{
 			_enabled.ValueChanged -= OnSettingsChanged;
 
-			_tpsFov.ValueChanged -= OnSettingsChanged;
-			_tpsFovADS.ValueChanged -= OnSettingsChanged;
+			_tpsFOV.ValueChanged -= OnSettingsChanged;
+			_tpsADSFOV.ValueChanged -= OnSettingsChanged;
 			_tpsFixedADSFOV.ValueChanged -= OnSettingsChanged;
 			_tpsForceExactFOV.ValueChanged -= OnSettingsChanged;
+			_tpsForceExactADSFOV.ValueChanged -= OnSettingsChanged;
+			_tpsDisableADSFOVChange.ValueChanged -= OnSettingsChanged;
 
 			_fpsFOV.ValueChanged -= OnSettingsChanged;
-			_fpsFOVADS.ValueChanged -= OnSettingsChanged;
+			_fpsADSFOV.ValueChanged -= OnSettingsChanged;
 			_fpsFixedADSFOV.ValueChanged -= OnSettingsChanged;
 			_fpsForceExactFOV.ValueChanged -= OnSettingsChanged;
-
-			_easeStrength.ValueChanged -= OnSettingsChanged;
+			_fpsForceExactADSFOV.ValueChanged -= OnSettingsChanged;
+			_fpsDisableADSFOVChange.ValueChanged -= OnSettingsChanged;
 		}
 
 
@@ -249,6 +265,7 @@ namespace RE9_CustomCameraFOV
 		[MethodHook(typeof(PlayerCameraFOVCalc), nameof(PlayerCameraFOVCalc.getFOV), MethodHookType.Pre)]
 		public static PreHookResult PrePlayerCameraFOVCalcGetFOV(Span<ulong> args)
 		{
+			//Always update the reference since it goes stale and crashes the game when trying to reapply params to update FOV after changing config
 			try { _playerCameraFOVCalc = ManagedObject.ToManagedObject(args[1]).TryAs<PlayerCameraFOVCalc>(); }
 			catch { _playerCameraFOVCalc = null; }
 			return PreHookResult.Continue;
@@ -277,58 +294,145 @@ namespace RE9_CustomCameraFOV
 				}
 
 				//Set new FOV
+				newFOV = Mathf.Clamp(newFOV, MIN_FOV, MAX_FOV);
 				ptr = (ptr & 0xFFFFFFFF00000000) | (uint)BitConverter.SingleToInt32Bits(newFOV);
 
 				//Log.Info("New FOV: " + newFOV);
 			}
 		}
 
+		//[Callback(typeof(LockScene), CallbackType.Pre)]
+		//public static void PreLockScene()
+		//{
+		//	InteractManager? interactManager = API.GetManagedSingletonT<InteractManager>();
+		//	if (interactManager != null && (interactManager.LimitType == InteractLimitType.PLOneAction))
+		//	{
+		//		CameraSystem? cameraSystem = API.GetManagedSingletonT<CameraSystem>();
+		//		if (cameraSystem != null)
+		//		{
+		//			Camera? camera = cameraSystem.getCameraObject(CameraDefine.Role.Main).TryGetComponent<Camera>("via.Camera");
+		//			if (camera != null)
+		//			{
+		//				camera.FOV = 71f;
+		//			}
+		//		}
+		//	}
+
+		//	PauseManager? pauseManager = API.GetManagedSingletonT<PauseManager>();
+		//	if (pauseManager != null && pauseManager._CurrentPauseTypes.Contains(PauseType.Cutscene))
+		//	{
+		//		CameraSystem? cameraSystem = API.GetManagedSingletonT<CameraSystem>();
+		//		if (cameraSystem != null)
+		//		{
+		//			Camera? camera = cameraSystem.getCameraObject(CameraDefine.Role.Main).TryGetComponent<Camera>("via.Camera");
+		//			if (camera != null)
+		//			{
+		//				camera.FOV = 71f;
+		//			}
+		//		}
+		//	}
+		//}
+
 
 
 		/* PLUGIN GENERATED UI */
+
 		[Callback(typeof(ImGuiDrawUI), CallbackType.Pre)]
 		public static void PreImGuiDrawUI()
 		{
-			if (ImGui.TreeNode(GUID_AND_V_VERSION))
+			if (API.IsDrawingUI() && ImGui.TreeNode(GUID_AND_V_VERSION))
 			{
+				const float INDENT = 12f;
 				int labelNr = 0;
 
+				//Description
+				ImGui.Text("DESCRIPTION");
+				ImGui.Separator();
 				ImGui.TextColored(_colorRed, "Note: FOV is vertical. 71 vertical ~= 103 horizontal @ 16:9.");
-				ImGui.Separator();
+				ImGui.Spacing();
 
-				ImGui.Text("- Force exact FOV ENABLED = use exact FOV values and don't \n"
-							+ "scale together with game FOV.");
-				ImGui.Text("- Force exact FOV DISABLED = allow configured FOV to scale \n"
-							+ "together with game FOV.");
-				ImGui.Separator();
+				ImGui.Text("- Force exact FOV");
+				ImGui.Indent(INDENT);
+				ImGui.Text("- Enabled: set FOV to the exact configured value");
+				ImGui.Text("- Disabled: allow FOV to scale together with the game FOV");
+				ImGui.Unindent(INDENT);
+				ImGui.Spacing();
 
-				ImGui.Text("- Fixed ADS FOV ENABLED = use ADS FOV value below.");
-				ImGui.Text("- Fixed ADS FOV DISABLED = zoom in same percent value \n"
-							+ "as the game starting from the configured (not ADS) FOV.");
+				ImGui.Text("- Fixed ADS FOV");
+				ImGui.Indent(INDENT);
+				ImGui.Text("- Enabled: set a target ADS FOV and allow it to scale together with the game FOV");
+				ImGui.Text("- Disabled: scale ADS FOV the same percent value as the game from the configured look FOV");
+				ImGui.Indent(INDENT);
+				ImGui.Text("- If game decreases FOV by 20 percent then FOV will decrease by 20 percent from the configured look FOV");
+				ImGui.Unindent(INDENT);
+				ImGui.Unindent(INDENT);
 				ImGui.Separator();
 				ImGui.NewLine();
 
+				//General
 				ImGui.Text("GENERAL");
 				ImGui.Separator();
-				_enabled.DrawCheckbox(); _enabled.DrawResetButtonSameLine(ref labelNr); ImGui.Spacing();
-				_easeStrength.DrawDragFloat(0.01f, 0f, 1f); _easeStrength.DrawResetButtonSameLine(ref labelNr);
+				_enabled.DrawCheckbox(); _enabled.DrawResetButtonSameLine(ref labelNr);
 				ImGui.NewLine();
 
+				//TPS
 				ImGui.Text("TPS");
 				ImGui.Separator();
+				ImGui.Spacing();
+
+				//TPS look
+				ImGui.Text("LOOK");
 				_tpsForceExactFOV.DrawCheckbox(); _tpsForceExactFOV.DrawResetButtonSameLine(ref labelNr);
-				_tpsFixedADSFOV.DrawCheckbox(); _tpsFixedADSFOV.DrawResetButtonSameLine(ref labelNr);
-				_tpsFov.DrawDragFloat(FOV_STEP, MIN_FOV, MAX_FOV); _tpsFov.DrawResetButtonSameLine(ref labelNr);
-				_tpsFovADS.DrawDragFloat(FOV_STEP, MIN_FOV, MAX_FOV); _tpsFovADS.DrawResetButtonSameLine(ref labelNr);
+				_tpsFOV.DrawDragFloat(FOV_STEP, MIN_FOV, MAX_FOV); _tpsFOV.DrawResetButtonSameLine(ref labelNr);
 				ImGui.NewLine();
 
+				//TPS ADS
+				ImGui.Text("ADS");
+				_tpsDisableADSFOVChange.DrawCheckbox(); _tpsDisableADSFOVChange.DrawResetButtonSameLine(ref labelNr);
+				bool isTPSDisableADSFOVChange = _tpsDisableADSFOVChange.Value;
+
+				ImGui.BeginDisabled(isTPSDisableADSFOVChange); _tpsForceExactADSFOV.DrawCheckbox(); ImGui.EndDisabled();
+				_tpsForceExactADSFOV.DrawResetButtonSameLine(ref labelNr);
+
+				ImGui.BeginDisabled(isTPSDisableADSFOVChange || _tpsForceExactADSFOV.Value); _tpsFixedADSFOV.DrawCheckbox(); ImGui.EndDisabled();
+				_tpsFixedADSFOV.DrawResetButtonSameLine(ref labelNr);
+				ImGui.Spacing();
+
+				ImGui.BeginDisabled(isTPSDisableADSFOVChange || (_tpsForceExactADSFOV.Value == false && _tpsFixedADSFOV.Value == false));
+				_tpsADSFOV.DrawDragFloat(FOV_STEP, MIN_FOV, MAX_FOV);
+				ImGui.EndDisabled();
+				_tpsADSFOV.DrawResetButtonSameLine(ref labelNr);
+				ImGui.NewLine();
+
+				//FPS
 				ImGui.Text("FPS");
 				ImGui.Separator();
-				_fpsForceExactFOV.DrawCheckbox(); _fpsForceExactFOV.DrawResetButtonSameLine(ref labelNr);
-				_fpsFixedADSFOV.DrawCheckbox(); _fpsFixedADSFOV.DrawResetButtonSameLine(ref labelNr);
-				_fpsFOV.DrawDragFloat(FOV_STEP, MIN_FOV, MAX_FOV); _fpsFOV.DrawResetButtonSameLine(ref labelNr);
-				_fpsFOVADS.DrawDragFloat(FOV_STEP, MIN_FOV, MAX_FOV); _fpsFOVADS.DrawResetButtonSameLine(ref labelNr);
+				ImGui.Spacing();
 
+				//FPS look
+				ImGui.Text("LOOK");
+				_fpsForceExactFOV.DrawCheckbox(); _fpsForceExactFOV.DrawResetButtonSameLine(ref labelNr);
+				_fpsFOV.DrawDragFloat(FOV_STEP, MIN_FOV, MAX_FOV); _fpsFOV.DrawResetButtonSameLine(ref labelNr);
+				ImGui.NewLine();
+
+				//FPS ADS
+				ImGui.Text("ADS");
+				_fpsDisableADSFOVChange.DrawCheckbox(); _fpsDisableADSFOVChange.DrawResetButtonSameLine(ref labelNr);
+				bool isFPSDisableADSFOVChange = _fpsDisableADSFOVChange.Value;
+
+				ImGui.BeginDisabled(isFPSDisableADSFOVChange); _fpsForceExactADSFOV.DrawCheckbox(); ImGui.EndDisabled();
+				_fpsForceExactADSFOV.DrawResetButtonSameLine(ref labelNr);
+
+				ImGui.BeginDisabled(isFPSDisableADSFOVChange || _fpsForceExactADSFOV.Value); _fpsFixedADSFOV.DrawCheckbox(); ImGui.EndDisabled();
+				_fpsFixedADSFOV.DrawResetButtonSameLine(ref labelNr);
+				ImGui.Spacing();
+
+				ImGui.BeginDisabled(isFPSDisableADSFOVChange || (_fpsForceExactADSFOV.Value == false && _fpsFixedADSFOV.Value == false));
+				_fpsADSFOV.DrawDragFloat(FOV_STEP, MIN_FOV, MAX_FOV);
+				ImGui.EndDisabled();
+				_fpsADSFOV.DrawResetButtonSameLine(ref labelNr);
+
+				//End
 				ImGui.TreePop();
 			}
 		}
@@ -357,11 +461,11 @@ namespace RE9_CustomCameraFOV
 
 	public static class Mathf
 	{
-		public static float EaseInOutSineLinearBlend(float t, float k)
+		public static float Clamp(float value, float min, float max)
 		{
-			if (t <= 0f) return (1f - k) * t;
-			if (t >= 1f) return 1f + (1f - k) * (t - 1f);
-			return t + k * ((1f - MathF.Cos(MathF.PI * t)) * 0.5f - t);
+			if (value < min) return min;
+			else if (value > max) return max;
+			else return value;
 		}
 	}
 
@@ -416,18 +520,7 @@ namespace RE9_CustomCameraFOV
 			return changed;
 		}
 
-		public static bool DrawResetButtonSameLine(this ConfigEntry<bool> configEntry, ref int labelNr)
-		{
-			float buttonWidth = CustomCameraFOVPlugin.ResetTextSize + ImGui.GetStyle().FramePadding.X * 2;
-
-			ImGui.SameLine(ImGui.GetContentRegionAvail().X - buttonWidth);
-			bool reset = ImGui.Button(TryGetResetButtonLabel(ref labelNr));
-			if (reset) configEntry.Reset();
-
-			return reset;
-		}
-
-		public static bool DrawResetButtonSameLine(this ConfigEntry<float> configEntry, ref int labelNr)
+		public static bool DrawResetButtonSameLine(this ConfigEntryBase configEntry, ref int labelNr)
 		{
 			float buttonWidth = CustomCameraFOVPlugin.ResetTextSize + ImGui.GetStyle().FramePadding.X * 2;
 
