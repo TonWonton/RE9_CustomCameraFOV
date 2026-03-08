@@ -27,7 +27,7 @@
 		<Reference Condition="'$(Configuration)' == 'Debug'" Include="..\..\Lib\REFrameworkNETPluginConfig\reframework\plugins\managed\dependencies\REFrameworkNETPluginConfig.dll">
 			<Private>false</Private>
 		</Reference>
-		<Reference Include="..\..\RE9\reframework\plugins\**\*dll">
+		<Reference Include="..\..\RE9\reframework\plugins\**\*.dll">
 			<Private>false</Private>
 		</Reference>
 	</ItemGroup>

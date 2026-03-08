@@ -24,7 +24,7 @@ namespace RE9_CustomCameraFOV
 		public const string COMPANY = "https://github.com/TonWonton/RE9_CustomCameraFOV";
 
 		public const string GUID = "RE9_CustomCameraFOV";
-		public const string VERSION = "1.4.0";
+		public const string VERSION = "1.4.1";
 
 		public const string GUID_AND_V_VERSION = GUID + " v" + VERSION;
 
@@ -38,6 +38,7 @@ namespace RE9_CustomCameraFOV
 		public const float DEFAULT_TPS_ADS_FOV = 25f;
 		public const float DEFAULT_FPS_FOV = 46f;
 		public const float DEFAULT_FPS_ADS_FOV = 40f;
+		public const float DEFAULT_SIGHT_FOV = 43f;
 
 		public const float MIN_FOV = 0f;
 		public const float MAX_FOV = 180f;
@@ -70,8 +71,11 @@ namespace RE9_CustomCameraFOV
 		private static InteractManager? _interactManager;
 		private static CharacterManager? _characterManager;
 		private static PlayerCameraFOVCalc? _playerCameraFOVCalc;
+		private static ScopeCameraControllerV3? _scopeCameraControllerV3;
+		private static ADSCameraController? _adsCameraController;
 
 		//Variables
+		private static Dictionary<ADSCameraZoomLogic_Base, float> _zoomLogicOriginalFOV = new Dictionary<ADSCameraZoomLogic_Base, float>();
 		private static float _previousTPSFOV = 0f;
 		public static float PreviousTPSFOV
 		{
@@ -92,6 +96,9 @@ namespace RE9_CustomCameraFOV
 			}
 		}
 
+		private static float _previousNewFOV = 0f;
+		public static float PreviousNewFOV { get { return _previousNewFOV; } }
+
 		private static float _resetTextSize = 0f;
 		public static float ResetTextSize
 		{
@@ -105,6 +112,17 @@ namespace RE9_CustomCameraFOV
 
 
 		/* METHODS */
+		private static float GetOriginalFOVFromZoomLogic(ADSCameraZoomLogic_Base zoomLogic)
+		{
+			if (_zoomLogicOriginalFOV.TryGetValue(zoomLogic, out float originalFOV) == false)
+			{
+				originalFOV = zoomLogic.CameraFOV;
+				_zoomLogicOriginalFOV[zoomLogic] = originalFOV;
+			}
+
+			return originalFOV;
+		}
+
 		private static float GetTPSFOV(float desiredFOV)
 		{
 			//Calculate FOV
@@ -181,6 +199,29 @@ namespace RE9_CustomCameraFOV
 			return newFOV;
 		}
 
+		private static float GetSightFOV(float desiredFOV)
+		{
+			//Log.Info("Original Sight FOV: " + desiredFOV);
+			float newFOV = desiredFOV;
+			float fpsFOV = _fpsFOV.Value;
+			float fpsADSFOV = _fpsADSFOV.Value;
+
+			if (_fpsDisableADSFOVChange.Value)
+			{
+				if (_fpsForceExactFOV.Value) newFOV = fpsFOV; //Force exact normal FOV
+				else newFOV = PreviousFPSFOV; //Set previous FOV
+			}
+			else
+			{
+				if (_fpsForceExactADSFOV.Value) newFOV = fpsADSFOV; //Force exact ADS FOV
+				else if (_fpsFixedADSFOV.Value) newFOV = desiredFOV / DEFAULT_SIGHT_FOV * fpsADSFOV; //Target specific FOV and scale with game
+				else newFOV = desiredFOV / DEFAULT_FPS_FOV * fpsFOV; //Zoom in same percent value as the game from the configured FOV
+			}
+
+			//Log.Info("New Sight FOV: " + newFOV);
+			return newFOV;
+		}
+
 		private static void ReApplyParamsToFOVCalc()
 		{
 			try
@@ -195,6 +236,148 @@ namespace RE9_CustomCameraFOV
 				}
 			}
 			catch { }
+		}
+
+		/* HOOKS */
+		//[MethodHook(typeof(ScopeCameraControllerV3), nameof(ScopeCameraControllerV3.setDisplayScope), MethodHookType.Pre)]
+		//public static PreHookResult PreScopeCameraSetupScopeInfo(Span<ulong> args)
+		//{
+		//	if (_scopeCameraControllerV3 == null) _scopeCameraControllerV3 = ManagedObject.ToManagedObject(args[1]).TryAs<ScopeCameraControllerV3>();
+		//	if (_scopeCameraControllerV3 != null)
+		//	{
+		//		ScopeCameraV3ParamUserData? paramUserData = _scopeCameraControllerV3._ParamUserData;
+		//		if (paramUserData != null)
+		//		{
+		//			paramUserData._LensImageDefaultScale = 1f;
+		//			paramUserData._LensImageZoomRate = 0f;
+		//		}
+		//	}
+
+		//	//_isScope = true;
+		//	return PreHookResult.Continue;
+		//}
+
+		[MethodHook(typeof(ADSCameraController), nameof(ADSCameraController.updateFOV), MethodHookType.Pre)]
+		public static PreHookResult PreADSCameraControllerUpdateFOV(Span<ulong> args)
+		{
+			if (_enabled.Value)
+			{
+				if (_adsCameraController == null) _adsCameraController = ManagedObject.ToManagedObject(args[1]).TryAs<ADSCameraController>();
+				if (_adsCameraController != null)
+				{
+					//Scope zoom
+					//ADSCameraController.ADSZoomData? adsZoomData = _adsCameraController.CurrentZoomData;
+					//if (adsZoomData != null)
+					//{
+					//	int currentZoomIndex = adsZoomData._CurrentZoomIndex;
+					//	int zoomStepsCount = adsZoomData._ZoomSteps.Count;
+
+					//	for (int i = 0; i < zoomStepsCount; i++)
+					//	{
+					//		ADSCameraZoomData_Base.ZoomStepData zoomStepData = adsZoomData._ZoomSteps[i];
+					//		if (zoomStepData != null)
+					//		{
+					//			//zoomStepData._ZoomFov = 11f;
+					//			//Log.Info("ZoomStep " + i + ": new FOV: " + zoomStepData._ZoomFov);
+					//		}
+					//	}
+					//}
+
+					//Sight zoom
+					var zoomLogics = _adsCameraController._ADSCameraZoomLogics;
+					if (zoomLogics != null)
+					{
+						int zoomLogicsLength = zoomLogics.Length;
+
+						for (int i = 0; i < zoomLogicsLength; i++)
+						{
+							ADSCameraZoomLogic_Base? zoomLogic = zoomLogics[i];
+							if (zoomLogic != null)
+							{
+								float desiredFOV = GetOriginalFOVFromZoomLogic(zoomLogic);
+								//Log.Info("Original ZoomLogicCameraFOV: " + i + " " + desiredFOV);
+								zoomLogic.CameraFOV = GetSightFOV(desiredFOV);
+								//Log.Info("New ZoomLogicCameraFOV: " + i + " " + zoomLogic.CameraFOV);
+							}
+							//Log.Info("New CameraFOV: " + zoomLogic.CameraFOV);
+
+							//int currentZoomIndex = zoomLogic.CurrentZoomIndex;
+							//int zoomStepsLength = zoomLogic.ZoomSteps.Length;
+
+							//Log.Info("ZoomLogic " + i + " CurrentZoomIndex: " + currentZoomIndex);
+							//Log.Info("ZoomLogic " + i + " ZoomStepsLength: " + zoomStepsLength);
+
+							//for (int x = 0; x < zoomStepsLength; x++)
+							//{
+							//	ADSCameraZoomData_Base.ZoomStepData? zoomStepData = zoomLogic.ZoomSteps[x];
+							//	if (zoomStepData == null) continue;
+
+							//	Log.Info("ZoomLogic " + i + " ZoomStep " + x + ": previous FOV: " + zoomStepData._ZoomFov);
+							//	zoomStepData._ZoomFov = _fpsFOV.Value;
+							//	//Log.Info("ZoomLogic " + i + " ZoomStep " + x + ": new FOV: " + zoomStepData._ZoomFov);
+							//}
+						}
+					}
+				}
+			}
+
+			return PreHookResult.Continue;
+		}
+
+		[MethodHook(typeof(PlayerCameraFOVCalc), nameof(PlayerCameraFOVCalc.getFOV), MethodHookType.Pre)]
+		public static PreHookResult PrePlayerCameraFOVCalcGetFOV(Span<ulong> args)
+		{
+			//Always update the reference since it goes stale and crashes the game when trying to reapply params to update FOV after changing config
+			try { _playerCameraFOVCalc = ManagedObject.ToManagedObject(args[1]).TryAs<PlayerCameraFOVCalc>(); }
+			catch { _playerCameraFOVCalc = null; }
+			return PreHookResult.Continue;
+		}
+
+		[MethodHook(typeof(PlayerCameraFOVCalc), nameof(PlayerCameraFOVCalc.getFOV), MethodHookType.Post)]
+		public static void PostPlayerCameraFOVCalcGetFOV(ref ulong retVal)
+		{
+			if (_enabled.Value)
+			{
+				//Get InteractManager and CharacterManager if null
+				if (_interactManager == null) _interactManager = API.GetManagedSingletonT<InteractManager>();
+				if (_characterManager == null) _characterManager = API.GetManagedSingletonT<CharacterManager>();
+
+				//Get return value
+				float desiredFOV = BitConverter.Int32BitsToSingle((int)(retVal & 0xFFFFFFFF));
+				float newFOV = desiredFOV;
+				//Log.Info("Original FOV: " + desiredFOV);
+
+				//Check current PlayerCameraMode and set FOV accordingly
+				if (_characterManager != null && _characterManager.PlayerContextFast != null)
+				{
+					PlayerMode currentViewMode = _characterManager.PlayerContextFast.CurrentViewMode;
+					if (currentViewMode == PlayerMode.TPS) newFOV = GetTPSFOV(desiredFOV);
+					else if (currentViewMode == PlayerMode.FPS) newFOV = GetFPSFOV(desiredFOV);
+				}
+
+				//Set new FOV
+				newFOV = Mathf.Clamp(newFOV, MIN_FOV, MAX_FOV);
+				_previousNewFOV = newFOV;
+				retVal = (retVal & 0xFFFFFFFF00000000) | (uint)BitConverter.SingleToInt32Bits(newFOV);
+
+				//Log.Info("New FOV: " + newFOV);
+			}
+		}
+
+		/* PLUGIN LOAD */
+		[PluginEntryPoint]
+		private static void Load()
+		{
+			RegisterConfigEvents();
+			_config.LoadFromJson();
+			Log.Info("Loaded " + VERSION);
+		}
+
+		[PluginExitPoint]
+		private static void Unload()
+		{
+			UnregisterConfigEvents();
+			Log.Info("Unloaded " + VERSION);
 		}
 
 		private static void OnSettingsChanged()
@@ -242,64 +425,6 @@ namespace RE9_CustomCameraFOV
 		}
 
 
-
-		/* PLUGIN LOAD */
-		[PluginEntryPoint]
-		private static void Load()
-		{
-			RegisterConfigEvents();
-			_config.LoadFromJson();
-			Log.Info("Loaded " + VERSION);
-		}
-
-		[PluginExitPoint]
-		private static void Unload()
-		{
-			UnregisterConfigEvents();
-			Log.Info("Unloaded " + VERSION);
-		}
-
-
-
-		/* HOOKS */
-		[MethodHook(typeof(PlayerCameraFOVCalc), nameof(PlayerCameraFOVCalc.getFOV), MethodHookType.Pre)]
-		public static PreHookResult PrePlayerCameraFOVCalcGetFOV(Span<ulong> args)
-		{
-			//Always update the reference since it goes stale and crashes the game when trying to reapply params to update FOV after changing config
-			try { _playerCameraFOVCalc = ManagedObject.ToManagedObject(args[1]).TryAs<PlayerCameraFOVCalc>(); }
-			catch { _playerCameraFOVCalc = null; }
-			return PreHookResult.Continue;
-		}
-
-		[MethodHook(typeof(PlayerCameraFOVCalc), nameof(PlayerCameraFOVCalc.getFOV), MethodHookType.Post)]
-		public static void PostPlayerCameraFOVCalcGetFOV(ref ulong ptr)
-		{
-			if (_enabled.Value)
-			{
-				//Get InteractManager and CharacterManager if null
-				if (_interactManager == null) _interactManager = API.GetManagedSingletonT<InteractManager>();
-				if (_characterManager == null) _characterManager = API.GetManagedSingletonT<CharacterManager>();
-
-				//Get return value
-				float desiredFOV = BitConverter.Int32BitsToSingle((int)(ptr & 0xFFFFFFFF));
-				float newFOV = desiredFOV;
-				//Log.Info("Original FOV: " + desiredFOV);
-
-				//Check current PlayerCameraMode and set FOV accordingly
-				if (_characterManager != null && _characterManager.PlayerContextFast != null)
-				{
-					PlayerMode currentViewMode = _characterManager.PlayerContextFast.CurrentViewMode;
-					if (currentViewMode == PlayerMode.TPS) newFOV = GetTPSFOV(desiredFOV);
-					else if (currentViewMode == PlayerMode.FPS) newFOV = GetFPSFOV(desiredFOV);
-				}
-
-				//Set new FOV
-				newFOV = Mathf.Clamp(newFOV, MIN_FOV, MAX_FOV);
-				ptr = (ptr & 0xFFFFFFFF00000000) | (uint)BitConverter.SingleToInt32Bits(newFOV);
-
-				//Log.Info("New FOV: " + newFOV);
-			}
-		}
 
 		//[Callback(typeof(LockScene), CallbackType.Pre)]
 		//public static void PreLockScene()
