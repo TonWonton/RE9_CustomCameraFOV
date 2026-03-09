@@ -24,7 +24,7 @@ namespace RE9_CustomCameraFOV
 		public const string COMPANY = "https://github.com/TonWonton/RE9_CustomCameraFOV";
 
 		public const string GUID = "RE9_CustomCameraFOV";
-		public const string VERSION = "1.4.1";
+		public const string VERSION = "1.5.0";
 
 		public const string GUID_AND_V_VERSION = GUID + " v" + VERSION;
 
@@ -67,6 +67,9 @@ namespace RE9_CustomCameraFOV
 		private static ConfigEntry<bool> _fpsForceExactADSFOV = _config.Add("FPS Force exact ADS FOV", false);
 		private static ConfigEntry<bool> _fpsDisableADSFOVChange = _config.Add("FPS Disable ADS zoom / FOV change", false);
 
+		//Scope
+		private static ConfigEntry<float> _scopeBaseZoomMultiplier = _config.Add("Scope Base Zoom Multiplier", 2f);
+
 		//References
 		private static InteractManager? _interactManager;
 		private static CharacterManager? _characterManager;
@@ -75,7 +78,9 @@ namespace RE9_CustomCameraFOV
 		private static ADSCameraController? _adsCameraController;
 
 		//Variables
+		private static Dictionary<ADSCameraZoomData_Base.ZoomStepData, float> _zoomStepDataOriginalFOV = new Dictionary<ADSCameraZoomData_Base.ZoomStepData, float>();
 		private static Dictionary<ADSCameraZoomLogic_Base, float> _zoomLogicOriginalFOV = new Dictionary<ADSCameraZoomLogic_Base, float>();
+
 		private static float _previousTPSFOV = 0f;
 		public static float PreviousTPSFOV
 		{
@@ -112,17 +117,6 @@ namespace RE9_CustomCameraFOV
 
 
 		/* METHODS */
-		private static float GetOriginalFOVFromZoomLogic(ADSCameraZoomLogic_Base zoomLogic)
-		{
-			if (_zoomLogicOriginalFOV.TryGetValue(zoomLogic, out float originalFOV) == false)
-			{
-				originalFOV = zoomLogic.CameraFOV;
-				_zoomLogicOriginalFOV[zoomLogic] = originalFOV;
-			}
-
-			return originalFOV;
-		}
-
 		private static float GetTPSFOV(float desiredFOV)
 		{
 			//Calculate FOV
@@ -130,32 +124,38 @@ namespace RE9_CustomCameraFOV
 			float tpsFOV = _tpsFOV.Value;
 			float tpsADSFOV = _tpsADSFOV.Value;
 
-			InteractManager? interactManager = _interactManager;
-			bool isADS = interactManager != null && (interactManager.LimitType == InteractLimitType.Stance || interactManager.LimitType == InteractLimitType.ScopeStance);
+			if (_interactManager == null) _interactManager = API.GetManagedSingletonT<InteractManager>();
 
-			if (isADS)
+			InteractManager? interactManager = _interactManager;
+			if (interactManager != null)
 			{
-				//ADS
-				if (_tpsDisableADSFOVChange.Value)
+				InteractLimitType limitType = interactManager.LimitType;
+				bool isADS = limitType == InteractLimitType.Stance || limitType == InteractLimitType.ScopeStance;
+
+				if (isADS)
 				{
-					//Set forced exact or previous FOV
-					if (_tpsForceExactFOV.Value) newFOV = tpsFOV; //Force exact value
-					else newFOV = PreviousTPSFOV; //Set previous FOV
+					//ADS
+					if (_tpsDisableADSFOVChange.Value)
+					{
+						//Set forced exact or previous FOV
+						if (_tpsForceExactFOV.Value) newFOV = tpsFOV; //Force exact value
+						else newFOV = PreviousTPSFOV; //Set previous FOV
+					}
+					else
+					{
+						//Calculate ADS FOV
+						if (_tpsForceExactADSFOV.Value) newFOV = tpsADSFOV; //Force exact ADS FOV
+						else if (_tpsFixedADSFOV.Value) newFOV = desiredFOV / DEFAULT_TPS_ADS_FOV * tpsADSFOV; //Target specific FOV and scale with game
+						else newFOV = desiredFOV / DEFAULT_TPS_FOV * tpsFOV; //Zoom in same percent value as the game from the configured FOV
+					}
 				}
 				else
 				{
-					//Calculate ADS FOV
-					if (_tpsForceExactADSFOV.Value) newFOV = tpsADSFOV; //Force exact ADS FOV
-					else if (_tpsFixedADSFOV.Value) newFOV = desiredFOV / DEFAULT_TPS_ADS_FOV * tpsADSFOV; //Target specific FOV and scale with game
+					//Look
+					if (_tpsForceExactFOV.Value) newFOV = tpsFOV; //Force exact value
 					else newFOV = desiredFOV / DEFAULT_TPS_FOV * tpsFOV; //Zoom in same percent value as the game from the configured FOV
+					_previousTPSFOV = newFOV;
 				}
-			}
-			else
-			{
-				//Look
-				if (_tpsForceExactFOV.Value) newFOV = tpsFOV; //Force exact value
-				else newFOV = desiredFOV / DEFAULT_TPS_FOV * tpsFOV; //Zoom in same percent value as the game from the configured FOV
-				_previousTPSFOV = newFOV;
 			}
 
 			return newFOV;
@@ -168,35 +168,87 @@ namespace RE9_CustomCameraFOV
 			float fpsFOV = _fpsFOV.Value;
 			float fpsADSFOV = _fpsADSFOV.Value;
 
-			InteractManager? interactManager = _interactManager;
-			bool isADS = interactManager != null && (interactManager.LimitType == InteractLimitType.Stance || interactManager.LimitType == InteractLimitType.ScopeStance);
+			if (_interactManager == null) _interactManager = API.GetManagedSingletonT<InteractManager>();
 
-			if (isADS)
+			InteractManager? interactManager = _interactManager;
+			if (interactManager != null)
 			{
-				//ADS
-				if (_fpsDisableADSFOVChange.Value)
+				InteractLimitType limitType = interactManager.LimitType;
+				bool isADS = limitType == InteractLimitType.Stance || limitType == InteractLimitType.ScopeStance;
+
+				if (isADS)
 				{
-					//Set forced exact or previous FOV
-					if (_fpsForceExactFOV.Value) newFOV = fpsFOV; //Force exact normal FOV
-					else newFOV = PreviousFPSFOV; //Set previous FOV
+					//ADS
+					if (_fpsDisableADSFOVChange.Value)
+					{
+						//Set forced exact or previous FOV
+						if (_fpsForceExactFOV.Value) newFOV = fpsFOV; //Force exact normal FOV
+						else newFOV = PreviousFPSFOV; //Set previous FOV
+					}
+					else
+					{
+						//Calculate ADS FOV
+						if (_fpsForceExactADSFOV.Value) newFOV = fpsADSFOV; //Force exact ADS FOV
+						else if (_fpsFixedADSFOV.Value) newFOV = desiredFOV / DEFAULT_FPS_ADS_FOV * fpsADSFOV; //Target specific FOV and scale with game
+						else newFOV = desiredFOV / DEFAULT_FPS_FOV * fpsFOV; //Zoom in same percent value as the game from the configured FOV
+					}
 				}
 				else
 				{
-					//Calculate ADS FOV
-					if (_fpsForceExactADSFOV.Value) newFOV = fpsADSFOV; //Force exact ADS FOV
-					else if (_fpsFixedADSFOV.Value) newFOV = desiredFOV / DEFAULT_FPS_ADS_FOV * fpsADSFOV; //Target specific FOV and scale with game
+					//Look
+					if (_fpsForceExactFOV.Value) newFOV = fpsFOV; //Force exact normal FOV
 					else newFOV = desiredFOV / DEFAULT_FPS_FOV * fpsFOV; //Zoom in same percent value as the game from the configured FOV
+					_previousFPSFOV = newFOV;
 				}
-			}
-			else
-			{
-				//Look
-				if (_fpsForceExactFOV.Value) newFOV = fpsFOV; //Force exact normal FOV
-				else newFOV = desiredFOV / DEFAULT_FPS_FOV * fpsFOV; //Zoom in same percent value as the game from the configured FOV
-				_previousFPSFOV = newFOV;
 			}
 
 			return newFOV;
+		}
+
+		private static bool TryGetOriginalFOVFromZoomStepData(ADSCameraZoomData_Base.ZoomStepData zoomStepData, out float originalFOV)
+		{
+			if (_zoomStepDataOriginalFOV.TryGetValue(zoomStepData, out float existingOriginalFOV))
+			{
+				originalFOV = existingOriginalFOV;
+				return true;
+			}
+			else
+			{
+				originalFOV = zoomStepData._ZoomFov;
+				if (originalFOV != 0f)
+				{
+					_zoomStepDataOriginalFOV[zoomStepData] = originalFOV;
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		private static bool TryGetOriginalFOVFromZoomLogic(ADSCameraZoomLogic_Base zoomLogic, out float originalFOV)
+		{
+			if (_zoomLogicOriginalFOV.TryGetValue(zoomLogic, out float existingOriginalFOV))
+			{
+				originalFOV = existingOriginalFOV;
+				return true;
+			}
+			else
+			{
+				originalFOV = zoomLogic.CameraFOV;
+				if (originalFOV != 0f)
+				{
+					_zoomLogicOriginalFOV[zoomLogic] = originalFOV;
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		private static float GetScopeFOV(float desiredFOV, int zoomStep)
+		{
+			float zoomDivisor = _scopeBaseZoomMultiplier.Value + 0.1f * zoomStep;
+			return desiredFOV / zoomDivisor;
 		}
 
 		private static float GetSightFOV(float desiredFOV)
@@ -239,23 +291,24 @@ namespace RE9_CustomCameraFOV
 		}
 
 		/* HOOKS */
-		//[MethodHook(typeof(ScopeCameraControllerV3), nameof(ScopeCameraControllerV3.setDisplayScope), MethodHookType.Pre)]
-		//public static PreHookResult PreScopeCameraSetupScopeInfo(Span<ulong> args)
-		//{
-		//	if (_scopeCameraControllerV3 == null) _scopeCameraControllerV3 = ManagedObject.ToManagedObject(args[1]).TryAs<ScopeCameraControllerV3>();
-		//	if (_scopeCameraControllerV3 != null)
-		//	{
-		//		ScopeCameraV3ParamUserData? paramUserData = _scopeCameraControllerV3._ParamUserData;
-		//		if (paramUserData != null)
-		//		{
-		//			paramUserData._LensImageDefaultScale = 1f;
-		//			paramUserData._LensImageZoomRate = 0f;
-		//		}
-		//	}
+		[MethodHook(typeof(ScopeCameraControllerV3), nameof(ScopeCameraControllerV3.setDisplayScope), MethodHookType.Pre)]
+		public static PreHookResult PreScopeCameraSetupScopeInfo(Span<ulong> args)
+		{
+			if (_scopeCameraControllerV3 == null) _scopeCameraControllerV3 = ManagedObject.ToManagedObject(args[1]).TryAs<ScopeCameraControllerV3>();
+			if (_scopeCameraControllerV3 != null)
+			{
+				ScopeCameraV3ParamUserData? paramUserData = _scopeCameraControllerV3._ParamUserData;
+				if (paramUserData != null)
+				{
+					//Set the default image scale to 1x and set zoom rate to 0
+					paramUserData._LensImageDefaultScale = 1f;
+					paramUserData._LensImageZoomRate = 0f;
+				}
+			}
 
-		//	//_isScope = true;
-		//	return PreHookResult.Continue;
-		//}
+			//_isScope = true;
+			return PreHookResult.Continue;
+		}
 
 		[MethodHook(typeof(ADSCameraController), nameof(ADSCameraController.updateFOV), MethodHookType.Pre)]
 		public static PreHookResult PreADSCameraControllerUpdateFOV(Span<ulong> args)
@@ -266,56 +319,38 @@ namespace RE9_CustomCameraFOV
 				if (_adsCameraController != null)
 				{
 					//Scope zoom
-					//ADSCameraController.ADSZoomData? adsZoomData = _adsCameraController.CurrentZoomData;
-					//if (adsZoomData != null)
-					//{
-					//	int currentZoomIndex = adsZoomData._CurrentZoomIndex;
-					//	int zoomStepsCount = adsZoomData._ZoomSteps.Count;
-
-					//	for (int i = 0; i < zoomStepsCount; i++)
-					//	{
-					//		ADSCameraZoomData_Base.ZoomStepData zoomStepData = adsZoomData._ZoomSteps[i];
-					//		if (zoomStepData != null)
-					//		{
-					//			//zoomStepData._ZoomFov = 11f;
-					//			//Log.Info("ZoomStep " + i + ": new FOV: " + zoomStepData._ZoomFov);
-					//		}
-					//	}
-					//}
+					ADSCameraController.ADSZoomData? adsZoomData = _adsCameraController.CurrentZoomData;
+					if (adsZoomData != null)
+					{
+						int zoomStepsCount = adsZoomData._ZoomSteps.Count;
+						for (int i = 0; i < zoomStepsCount; i++)
+						{
+							ADSCameraZoomData_Base.ZoomStepData zoomStepData = adsZoomData._ZoomSteps[i];
+							if (zoomStepData != null)
+							{
+								if (TryGetOriginalFOVFromZoomStepData(zoomStepData, out float originalFOV))
+								{
+									zoomStepData._ZoomFov = GetScopeFOV(originalFOV, i);
+								}
+							}
+						}
+					}
 
 					//Sight zoom
-					var zoomLogics = _adsCameraController._ADSCameraZoomLogics;
+					ADSCameraZoomLogic_Base_Array1D? zoomLogics = _adsCameraController._ADSCameraZoomLogics;
 					if (zoomLogics != null)
 					{
 						int zoomLogicsLength = zoomLogics.Length;
-
 						for (int i = 0; i < zoomLogicsLength; i++)
 						{
 							ADSCameraZoomLogic_Base? zoomLogic = zoomLogics[i];
 							if (zoomLogic != null)
 							{
-								float desiredFOV = GetOriginalFOVFromZoomLogic(zoomLogic);
-								//Log.Info("Original ZoomLogicCameraFOV: " + i + " " + desiredFOV);
-								zoomLogic.CameraFOV = GetSightFOV(desiredFOV);
-								//Log.Info("New ZoomLogicCameraFOV: " + i + " " + zoomLogic.CameraFOV);
+								if (TryGetOriginalFOVFromZoomLogic(zoomLogic, out float originalFOV))
+								{
+									zoomLogic.CameraFOV = GetSightFOV(originalFOV);
+								}
 							}
-							//Log.Info("New CameraFOV: " + zoomLogic.CameraFOV);
-
-							//int currentZoomIndex = zoomLogic.CurrentZoomIndex;
-							//int zoomStepsLength = zoomLogic.ZoomSteps.Length;
-
-							//Log.Info("ZoomLogic " + i + " CurrentZoomIndex: " + currentZoomIndex);
-							//Log.Info("ZoomLogic " + i + " ZoomStepsLength: " + zoomStepsLength);
-
-							//for (int x = 0; x < zoomStepsLength; x++)
-							//{
-							//	ADSCameraZoomData_Base.ZoomStepData? zoomStepData = zoomLogic.ZoomSteps[x];
-							//	if (zoomStepData == null) continue;
-
-							//	Log.Info("ZoomLogic " + i + " ZoomStep " + x + ": previous FOV: " + zoomStepData._ZoomFov);
-							//	zoomStepData._ZoomFov = _fpsFOV.Value;
-							//	//Log.Info("ZoomLogic " + i + " ZoomStep " + x + ": new FOV: " + zoomStepData._ZoomFov);
-							//}
 						}
 					}
 				}
@@ -338,8 +373,8 @@ namespace RE9_CustomCameraFOV
 		{
 			if (_enabled.Value)
 			{
-				//Get InteractManager and CharacterManager if null
-				if (_interactManager == null) _interactManager = API.GetManagedSingletonT<InteractManager>();
+				//Get CharacterManager if null
+
 				if (_characterManager == null) _characterManager = API.GetManagedSingletonT<CharacterManager>();
 
 				//Get return value
@@ -364,6 +399,17 @@ namespace RE9_CustomCameraFOV
 			}
 		}
 
+
+
+		/* EVENT HANDLING */
+		private static void OnSettingsChanged()
+		{
+			_config.SaveToJson();
+			ReApplyParamsToFOVCalc();
+		}
+
+
+
 		/* PLUGIN LOAD */
 		[PluginEntryPoint]
 		private static void Load()
@@ -380,48 +426,20 @@ namespace RE9_CustomCameraFOV
 			Log.Info("Unloaded " + VERSION);
 		}
 
-		private static void OnSettingsChanged()
-		{
-			_config.SaveToJson();
-			ReApplyParamsToFOVCalc();
-		}
-
 		private static void RegisterConfigEvents()
 		{
-			_enabled.ValueChanged += OnSettingsChanged;
-
-			_tpsFOV.ValueChanged += OnSettingsChanged;
-			_tpsADSFOV.ValueChanged += OnSettingsChanged;
-			_tpsFixedADSFOV.ValueChanged += OnSettingsChanged;
-			_tpsForceExactFOV.ValueChanged += OnSettingsChanged;
-			_tpsForceExactADSFOV.ValueChanged += OnSettingsChanged;
-			_tpsDisableADSFOVChange.ValueChanged += OnSettingsChanged;
-
-			_fpsFOV.ValueChanged += OnSettingsChanged;
-			_fpsADSFOV.ValueChanged += OnSettingsChanged;
-			_fpsFixedADSFOV.ValueChanged += OnSettingsChanged;
-			_fpsForceExactFOV.ValueChanged += OnSettingsChanged;
-			_fpsForceExactADSFOV.ValueChanged += OnSettingsChanged;
-			_fpsDisableADSFOVChange.ValueChanged += OnSettingsChanged;
+			foreach (ConfigEntryBase configEntry in _config.Values)
+			{
+				configEntry.ValueChanged += OnSettingsChanged;
+			}
 		}
 
 		private static void UnregisterConfigEvents()
 		{
-			_enabled.ValueChanged -= OnSettingsChanged;
-
-			_tpsFOV.ValueChanged -= OnSettingsChanged;
-			_tpsADSFOV.ValueChanged -= OnSettingsChanged;
-			_tpsFixedADSFOV.ValueChanged -= OnSettingsChanged;
-			_tpsForceExactFOV.ValueChanged -= OnSettingsChanged;
-			_tpsForceExactADSFOV.ValueChanged -= OnSettingsChanged;
-			_tpsDisableADSFOVChange.ValueChanged -= OnSettingsChanged;
-
-			_fpsFOV.ValueChanged -= OnSettingsChanged;
-			_fpsADSFOV.ValueChanged -= OnSettingsChanged;
-			_fpsFixedADSFOV.ValueChanged -= OnSettingsChanged;
-			_fpsForceExactFOV.ValueChanged -= OnSettingsChanged;
-			_fpsForceExactADSFOV.ValueChanged -= OnSettingsChanged;
-			_fpsDisableADSFOVChange.ValueChanged -= OnSettingsChanged;
+			foreach (ConfigEntryBase configEntry in _config.Values)
+			{
+				configEntry.ValueChanged -= OnSettingsChanged;
+			}
 		}
 
 
@@ -556,6 +574,12 @@ namespace RE9_CustomCameraFOV
 				_fpsADSFOV.DrawDragFloat(FOV_STEP, MIN_FOV, MAX_FOV);
 				ImGui.EndDisabled();
 				_fpsADSFOV.DrawResetButtonSameLine(ref labelNr);
+				ImGui.NewLine();
+
+				//Scope
+				ImGui.Text("SCOPE");
+				ImGui.Separator();
+				_scopeBaseZoomMultiplier.DrawDragFloat(0.01f, 0f, 10f); _scopeBaseZoomMultiplier.DrawResetButtonSameLine(ref labelNr);
 
 				//End
 				ImGui.TreePop();

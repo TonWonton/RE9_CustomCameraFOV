@@ -60,3 +60,8 @@ Custom camera FOV mod / plugin for Resident Evil Requiem (RE9). Set custom FOV f
 
 ### v1.4.1
 - Fix red dot sights not being affected by FOV settings
+
+### v1.5.0
+- Add option to change scope base zoom multiplier
+- Fix the scope being low resolution
+- Fix the FOV being wrong for red dot sights sometimes when not using disabled FPS ADS FOV or FPS force exact ADS FOV
