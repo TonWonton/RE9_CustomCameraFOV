@@ -21,8 +21,9 @@ Custom camera FOV mod / plugin for RE9. Set different FOV for third person, firs
 - Change ADS FOV for 1st and 3rd person separately
 - Disable ADS zoom / FOV change
 - Two different ADS FOV modes
-  - Fixed ADS FOV
+  - Exact ADS FOV
   - Zoom in same percentage as the game based on the configured (not ADS) FOV
+- Can change scope base FOV multiplier
 - Scope is rendered at full quality/resolution
   - Improves performance compared to the base game when aiming with the scope
 - FOV zoom speed is unchanged (exact same speed as the game for all settings)
@@ -66,3 +67,10 @@ Custom camera FOV mod / plugin for RE9. Set different FOV for third person, firs
 - Add option to change scope base zoom multiplier
 - Fix the scope being low resolution
 - Fix the FOV being wrong for red dot sights sometimes when not using disabled FPS ADS FOV or FPS force exact ADS FOV
+
+### v1.6.0
+- Fix FOV being higher or lower depending on character or situation if exact FOV wasn't enabled
+  - Normal look FOV is now always exact
+- Removed normal look exact FOV option
+- Removed fixed ADS FOV
+- Fix red dot sight FOV scaling

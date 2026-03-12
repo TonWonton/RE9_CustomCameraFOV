@@ -19,17 +19,21 @@
 	</PropertyGroup>
 
 
+	<ItemGroup>
+		<Reference Condition="'$(Configuration)' == 'Debug'" Include="..\..\Lib\REFrameworkNETPluginConfig\reframework\plugins\managed\dependencies\REFrameworkNETPluginConfig.dll">
+			<Private>false</Private>
+		</Reference>
+	</ItemGroup>
+
 	<ItemGroup Condition="'$(Configuration)' == 'Release'">
 		<Compile Include="..\..\REFrameworkNETPluginConfig\REFrameworkNETPluginConfig\REFrameworkNETPluginConfig.cs" Link="REFrameworkNETPluginConfig.cs" />
 	</ItemGroup>
 
 	<ItemGroup>
-		<Reference Condition="'$(Configuration)' == 'Debug'" Include="..\..\Lib\REFrameworkNETPluginConfig\reframework\plugins\managed\dependencies\REFrameworkNETPluginConfig.dll">
-			<Private>false</Private>
-		</Reference>
 		<Reference Include="..\..\RE9\reframework\plugins\**\*.dll">
 			<Private>false</Private>
 		</Reference>
+		<Compile Include="..\..\REFrameworkNETPluginConfig\Utility\REFrameworkNETPluginConfigImGui.cs" Link="REFrameworkNETPluginConfigImGui.cs" />
 	</ItemGroup>
 
 
