@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using Hexa.NET.ImGui;
 using REFrameworkNET.Callbacks;
 using REFrameworkNET.Attributes;
@@ -9,7 +10,6 @@ using REFrameworkNETPluginConfig;
 using REFrameworkNETPluginConfig.Utility;
 using app;
 using via;
-using System.Numerics;
 using InteractLimitType = app.InteractManager.InteractLimitType;
 
 
@@ -25,7 +25,7 @@ namespace RE9_CustomCameraFOV
 		public const string COMPANY = "https://github.com/TonWonton/RE9_CustomCameraFOV";
 
 		public const string GUID = "RE9_CustomCameraFOV";
-		public const string VERSION = "1.6.0";
+		public const string VERSION = "1.6.1";
 
 		public const string GUID_AND_V_VERSION = GUID + " v" + VERSION;
 
@@ -43,7 +43,7 @@ namespace RE9_CustomCameraFOV
 
 		public const float MIN_FOV = 0f;
 		public const float MAX_FOV = 180f;
-		public const float FOV_STEP = 0.1f;
+		public const float FOV_STEP = 0.01f;
 
 		//Config
 		private static Config _config = new Config(GUID);
@@ -69,9 +69,9 @@ namespace RE9_CustomCameraFOV
 		//References
 		private static InteractManager? _interactManager;
 		private static CharacterManager? _characterManager;
-		private static PlayerCameraFOVCalc? _playerCameraFOVCalc;
 		private static ScopeCameraControllerV3? _scopeCameraControllerV3;
 		private static ADSCameraController? _adsCameraController;
+		private static ulong _playerCameraFOVCalcAddress;
 
 		//Variables
 		private static Dictionary<ADSCameraZoomData_Base.ZoomStepData, float> _zoomStepDataOriginalFOV = new Dictionary<ADSCameraZoomData_Base.ZoomStepData, float>();
@@ -94,6 +94,46 @@ namespace RE9_CustomCameraFOV
 
 
 		/* METHODS */
+		private static bool TryGetInteractManager([MaybeNullWhen(false)] out InteractManager interactManager)
+		{
+			interactManager = _interactManager;
+			if (interactManager != null)
+			{
+				return true;
+			}
+			else
+			{
+				interactManager = API.GetManagedSingletonT<InteractManager>();
+				if (interactManager != null)
+				{
+					_interactManager = interactManager;
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		private static bool TryGetCharacterManager([MaybeNullWhen(false)] out CharacterManager characterManager)
+		{
+			characterManager = _characterManager;
+			if (characterManager != null)
+			{
+				return true;
+			}
+			else
+			{
+				characterManager = API.GetManagedSingletonT<CharacterManager>();
+				if (characterManager != null)
+				{
+					_characterManager = characterManager;
+					return true;
+				}
+			}
+
+			return false;
+		}
+
 		private static float GetTPSFOV(float desiredFOV)
 		{
 			//Calculate FOV
@@ -101,27 +141,17 @@ namespace RE9_CustomCameraFOV
 			float tpsFOV = _tpsFOV.Value;
 			float tpsADSFOV = _tpsADSFOV.Value;
 
-			if (_interactManager == null) _interactManager = API.GetManagedSingletonT<InteractManager>();
-
-			InteractManager? interactManager = _interactManager;
-			if (interactManager != null)
+			if (TryGetInteractManager(out InteractManager? interactManager))
 			{
 				InteractLimitType limitType = interactManager.LimitType;
-				bool isADS = limitType == InteractLimitType.Stance || limitType == InteractLimitType.ScopeStance;
+				bool isADS = (limitType & InteractLimitType.Stance) != 0 || (limitType & InteractLimitType.ScopeStance) != 0;
 
 				if (isADS)
 				{
 					//ADS
-					if (_tpsDisableADSFOVChange.Value)
-					{
-						newFOV = tpsFOV; //Set exact value
-					}
-					else
-					{
-						//Calculate ADS FOV
-						if (_tpsForceExactADSFOV.Value) newFOV = tpsADSFOV; //Force exact ADS FOV
-						else newFOV = desiredFOV / PreviousDesiredTPSFOV * tpsFOV; //Zoom in same percent value as the game from the configured FOV
-					}
+					if (_tpsDisableADSFOVChange.Value) newFOV = tpsFOV; //Set exact value
+					else if (_tpsForceExactADSFOV.Value) newFOV = tpsADSFOV; //Force exact ADS FOV
+					else newFOV = desiredFOV / PreviousDesiredTPSFOV * tpsFOV; //Zoom in same percent value as the game from the configured FOV
 				}
 				else
 				{
@@ -141,27 +171,17 @@ namespace RE9_CustomCameraFOV
 			float fpsFOV = _fpsFOV.Value;
 			float fpsADSFOV = _fpsADSFOV.Value;
 
-			if (_interactManager == null) _interactManager = API.GetManagedSingletonT<InteractManager>();
-
-			InteractManager? interactManager = _interactManager;
-			if (interactManager != null)
+			if (TryGetInteractManager(out InteractManager? interactManager))
 			{
 				InteractLimitType limitType = interactManager.LimitType;
-				bool isADS = limitType == InteractLimitType.Stance || limitType == InteractLimitType.ScopeStance;
+				bool isADS = (limitType & InteractLimitType.Stance) != 0 || (limitType & InteractLimitType.ScopeStance) != 0;
 
 				if (isADS)
 				{
 					//ADS
-					if (_fpsDisableADSFOVChange.Value)
-					{
-						newFOV = fpsFOV; //Set exact value
-					}
-					else
-					{
-						//Calculate ADS FOV
-						if (_fpsForceExactADSFOV.Value) newFOV = fpsADSFOV; //Force exact ADS FOV
-						else newFOV = desiredFOV / PreviousDesiredFPSFOV * fpsFOV; //Zoom in same percent value as the game from the configured FOV
-					}
+					if (_fpsDisableADSFOVChange.Value) newFOV = fpsFOV; //Set exact value
+					else if (_fpsForceExactADSFOV.Value) newFOV = fpsADSFOV; //Force exact ADS FOV
+					else newFOV = desiredFOV / PreviousDesiredFPSFOV * fpsFOV; //Zoom in same percent value as the game from the configured FOV
 				}
 				else
 				{
@@ -227,15 +247,9 @@ namespace RE9_CustomCameraFOV
 			float fpsFOV = _fpsFOV.Value;
 			float fpsADSFOV = _fpsADSFOV.Value;
 
-			if (_fpsDisableADSFOVChange.Value)
-			{
-				newFOV = fpsFOV; //Set exact value
-			}
-			else
-			{
-				if (_fpsForceExactADSFOV.Value) newFOV = fpsADSFOV; //Force exact ADS FOV
-				else newFOV = desiredFOV / LEON_FPS_FOV * fpsFOV; //Zoom in same percent value as the game from the configured FOV
-			}
+			if (_fpsDisableADSFOVChange.Value) newFOV = fpsFOV; //Set exact value
+			else if (_fpsForceExactADSFOV.Value) newFOV = fpsADSFOV; //Force exact ADS FOV
+			else newFOV = desiredFOV / LEON_FPS_FOV * fpsFOV; //Zoom in same percent value as the game from the configured FOV
 
 			return newFOV;
 		}
@@ -244,12 +258,13 @@ namespace RE9_CustomCameraFOV
 		{
 			try
 			{
-				if (_playerCameraFOVCalc != null)
+				PlayerCameraFOVCalc? playerCameraFOVCalc = ManagedObject.ToManagedObject(_playerCameraFOVCalcAddress).TryAs<PlayerCameraFOVCalc>();
+				if (playerCameraFOVCalc != null)
 				{
-					var param = _playerCameraFOVCalc._Param;
+					var param = playerCameraFOVCalc._Param;
 					if (param != null)
 					{
-						_playerCameraFOVCalc.setup(param);
+						playerCameraFOVCalc.setup(param);
 					}
 				}
 			}
@@ -336,9 +351,8 @@ namespace RE9_CustomCameraFOV
 		[MethodHook(typeof(PlayerCameraFOVCalc), nameof(PlayerCameraFOVCalc.getFOV), MethodHookType.Pre)]
 		public static PreHookResult PrePlayerCameraFOVCalcGetFOV(Span<ulong> args)
 		{
-			//Always update the reference since it goes stale and crashes the game when trying to reapply params to update FOV after changing config
-			try { _playerCameraFOVCalc = ManagedObject.ToManagedObject(args[1]).TryAs<PlayerCameraFOVCalc>(); }
-			catch { _playerCameraFOVCalc = null; }
+			//Store address in order to re-apply params OnSettingsChanged()
+			_playerCameraFOVCalcAddress = args[1];
 			return PreHookResult.Continue;
 		}
 
@@ -347,28 +361,22 @@ namespace RE9_CustomCameraFOV
 		{
 			if (_enabled.Value)
 			{
-				//Get CharacterManager if null
-
-				if (_characterManager == null) _characterManager = API.GetManagedSingletonT<CharacterManager>();
-
-				//Get return value
-				float desiredFOV = BitConverter.Int32BitsToSingle((int)(retVal & 0xFFFFFFFF));
-				float newFOV = desiredFOV;
-				//Log.Info("Original FOV: " + desiredFOV);
-
-				//Check current PlayerCameraMode and set FOV accordingly
-				if (_characterManager != null && _characterManager.PlayerContextFast != null)
+				if (TryGetCharacterManager(out CharacterManager? characterManager))
 				{
-					PlayerMode currentViewMode = _characterManager.PlayerContextFast.CurrentViewMode;
-					if (currentViewMode == PlayerMode.TPS) newFOV = GetTPSFOV(desiredFOV);
-					else if (currentViewMode == PlayerMode.FPS) newFOV = GetFPSFOV(desiredFOV);
+					//Get return value
+					float desiredFOV = BitConverter.Int32BitsToSingle((int)retVal);
+					float newFOV = desiredFOV;
+
+					//Check current PlayerCameraMode and set FOV accordingly
+					var playerContext = characterManager.PlayerContextFast;
+					if (playerContext != null)
+					{
+						PlayerMode currentViewMode = playerContext.CurrentViewMode;
+						if (currentViewMode == PlayerMode.TPS) newFOV = GetTPSFOV(desiredFOV);
+						else if (currentViewMode == PlayerMode.FPS) newFOV = GetFPSFOV(desiredFOV);
+						retVal = (retVal & 0xFFFFFFFF00000000) | (uint)BitConverter.SingleToInt32Bits(newFOV);
+					}
 				}
-
-				//Set new FOV
-				newFOV = Mathf.Clamp(newFOV, MIN_FOV, MAX_FOV);
-				retVal = (retVal & 0xFFFFFFFF00000000) | (uint)BitConverter.SingleToInt32Bits(newFOV);
-
-				//Log.Info("New FOV: " + newFOV);
 			}
 		}
 
@@ -428,6 +436,7 @@ namespace RE9_CustomCameraFOV
 
 				//General
 				ImGuiF.Category("GENERAL");
+				ImGui.Text("Note: FOV is vertical.");
 				_enabled.Checkbox().ResetButton(ref labelNr);
 
 				//TPS
@@ -452,42 +461,11 @@ namespace RE9_CustomCameraFOV
 
 				//Scope
 				ImGuiF.Category("SCOPE");
-				_scopeBaseZoomMultiplier.DragFloat(0.01f, 0f, 10f).ResetButton(ref labelNr);
+				_scopeBaseZoomMultiplier.DragFloat(0.001f, 0f, 10f).ResetButton(ref labelNr);
 
 				//End
 				ImGui.TreePop();
 			}
-		}
-	}
-
-	public static class Extensions
-	{
-		public static T? TryGetComponent<T>(this GameObject gameObject, string typeName) where T : class
-		{
-			_System.Type? type = _System.Type.GetType(typeName);
-			if (type != null)
-			{
-				Component? componentFromGameObject = gameObject.getComponent(type);
-				if (componentFromGameObject != null)
-				{
-					if (componentFromGameObject is IObject componentIObject)
-					{
-						return componentIObject.TryAs<T>();
-					}
-				}
-			}
-
-			return null;
-		}
-	}
-
-	public static class Mathf
-	{
-		public static float Clamp(float value, float min, float max)
-		{
-			if (value < min) return min;
-			else if (value > max) return max;
-			else return value;
 		}
 	}
 
