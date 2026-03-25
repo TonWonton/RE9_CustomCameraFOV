@@ -10,9 +10,6 @@
 		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
 		<AllowUnsafeBlocks>True</AllowUnsafeBlocks>
 		<CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
-	</PropertyGroup>
-
-	<PropertyGroup Condition="'$(Configuration)' == 'Release'">
 		<DefineConstants>EMBEDDED_SOURCE</DefineConstants>
 		<PathMap>$(MSBuildProjectDirectory)=$(MSBuildProjectName)</PathMap>
 		<Deterministic>true</Deterministic>
@@ -20,27 +17,18 @@
 
 
 	<ItemGroup>
-		<Reference Condition="'$(Configuration)' == 'Debug'" Include="..\..\Lib\REFrameworkNETPluginConfig\reframework\plugins\managed\dependencies\REFrameworkNETPluginConfig.dll">
-			<Private>false</Private>
-		</Reference>
-	</ItemGroup>
-
-	<ItemGroup Condition="'$(Configuration)' == 'Release'">
-		<Compile Include="..\..\REFrameworkNETPluginConfig\REFrameworkNETPluginConfig\REFrameworkNETPluginConfig.cs" Link="REFrameworkNETPluginConfig.cs" />
-	</ItemGroup>
-
-	<ItemGroup>
 		<Reference Include="..\..\RE9\reframework\plugins\**\*.dll">
 			<Private>false</Private>
 		</Reference>
+		<Compile Include="..\..\REFrameworkNETPluginConfig\REFrameworkNETPluginConfig\REFrameworkNETPluginConfig.cs" Link="REFrameworkNETPluginConfig.cs" />
 		<Compile Include="..\..\REFrameworkNETPluginConfig\Utility\ImGuiF.cs" Link="ImGuiF.cs" />
 	</ItemGroup>
 
 
 	<Target Name="PostBuild" AfterTargets="PostBuildEvent">
-		<Exec Condition="'$(Configuration)' == 'Debug'" Command="xcopy &quot;$(MSBuildProjectDirectory)\RE9_CustomCameraFOV.cs&quot; &quot;D:\Games\steamapps\common\RESIDENT EVIL requiem BIOHAZARD requiem\reframework\plugins\source\&quot; /s /i /y" />
-		<Exec Condition="'$(Configuration)' == 'Release'" Command="xcopy &quot;$(TargetPath)&quot; &quot;D:\Games\steamapps\common\RESIDENT EVIL requiem BIOHAZARD requiem\reframework\plugins\managed\&quot; /s /i /y" />
+		<Exec Command="xcopy &quot;$(TargetPath)&quot; &quot;D:\Games\steamapps\common\RESIDENT EVIL requiem BIOHAZARD requiem\reframework\plugins\managed\&quot; /s /i /y" />
 		<Exec Condition="'$(Configuration)' == 'Release'" Command="xcopy &quot;$(TargetPath)&quot; &quot;$(MSBuildProjectDirectory)\..\Releases\reframework\plugins\managed\&quot; /s /i /y" />
 	</Target>
+
 
 </Project>
